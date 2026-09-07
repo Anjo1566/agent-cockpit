@@ -2,3 +2,8 @@
 *.sh text eol=lf
 *.md text eol=lf
 *.json text eol=lf
+# cockpit.cmd MUSS CRLF haben -- mit reinen LF weigert sich cmd.exe, die Datei
+# auszufuehren, und zwar ohne brauchbare Meldung. Die Installation des Loops
+# hat diese Zeile ueberschrieben; sie gehoert diesem Projekt.
+*.cmd text eol=crlf
+*.png binary
