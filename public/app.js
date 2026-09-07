@@ -399,15 +399,19 @@ function sperren (daten) {
   // Die Tafel selbst, angesetzt am Bauteil.
   const tx = r.cx - 210
   const ty = r.massOben ? r.cy + 120 : r.cy - 200
+  // Die Tafel waechst mit der Meldung, statt dass sich die Zeilen ueberlagern.
+  const zeilen = umbrechen(daten.meldung || '', 52, 2)
+  const hoehe = 62 + zeilen.length * 18
+
   const g = el('g', { transform: `translate(${tx} ${ty})` })
-  g.appendChild(el('rect', { class: 'tafel', x: 0, y: 0, width: 420, height: 92 }))
-  g.appendChild(el('path', { class: 'verbot', d: 'M26 46 m-9 0 a9 9 0 1 0 18 0 a9 9 0 1 0 -18 0 M20 40 L32 52' }))
-  g.appendChild(el('text', { class: 'titel', x: 48, y: 30 }, [document.createTextNode('GESPERRT')]))
-  umbrechen(daten.meldung || '', 52, 2).forEach((zeile, i) => {
-    g.appendChild(el('text', { class: 'meldung', x: 48, y: 50 + i * 17 },
+  g.appendChild(el('rect', { class: 'tafel', x: 0, y: 0, width: 420, height: hoehe }))
+  g.appendChild(el('path', { class: 'verbot', d: 'M26 44 m-9 0 a9 9 0 1 0 18 0 a9 9 0 1 0 -18 0 M20 38 L32 50' }))
+  g.appendChild(el('text', { class: 'titel', x: 48, y: 28 }, [document.createTextNode('GESPERRT')]))
+  zeilen.forEach((zeile, i) => {
+    g.appendChild(el('text', { class: 'meldung', x: 48, y: 48 + i * 18 },
       [document.createTextNode(zeile)]))
   })
-  g.appendChild(el('text', { class: 'quelle', x: 48, y: 72 },
+  g.appendChild(el('text', { class: 'quelle', x: 48, y: hoehe - 12 },
     [document.createTextNode(`${daten.hook || 'PreToolUse'} · exit 2${daten.werkzeug ? ' · ' + daten.werkzeug.name : ''}`)]))
   tafel.appendChild(g)
 
