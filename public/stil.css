@@ -114,6 +114,17 @@ body {
 .knopf-start.laeuft { color: var(--rot); border-color: var(--rot); }
 .knopf-start.laeuft:hover { color: var(--ink-000); background: var(--rot); }
 .knopf-klein { padding: 4px 9px; font-size: 9px; }
+/* Die Zahl offener Fragen sitzt im Knopf selbst -- sie ist ein Befund, keine
+   Verzierung, und soll auffallen, sobald es einen gibt. */
+#fragenzahl:not(:empty) {
+  margin-left: 7px; padding: 1px 5px; font-size: 9px;
+  border: 1px solid var(--akzent); color: var(--akzent);
+}
+.frageneintrag {
+  border-left: 2px solid var(--akzent); padding: 10px 12px; margin-bottom: 10px;
+  font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6;
+  color: var(--text-hi); background: var(--ink-020);
+}
 .knopf[disabled] { opacity: .35; cursor: not-allowed; }
 
 .live {

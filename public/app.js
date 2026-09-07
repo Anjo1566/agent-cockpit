@@ -34,6 +34,10 @@ const zustand = {
   kantenzustand: { e1: 'ghost', e2: 'ghost', e3: 'ghost' }
 }
 
+// Zeilenumbrueche, wie sie aus einer Datei kommen -- auch aus einer, die unter
+// Windows geschrieben wurde.
+const SPLIT_ZEILEN = /\r?\n/
+
 const $ = (s) => document.querySelector(s)
 const el = (name, attrs = {}, kinder = []) => {
   const k = document.createElementNS(NS, name)
@@ -229,7 +233,8 @@ function render () {
   $('#zTests').classList.toggle('gruen', zustand.tests.gruen === true)
   $('#zTests').classList.toggle('rot', zustand.tests.gruen === false)
   $('#wKosten').textContent = zustand.kosten ? `$${zustand.kosten.toFixed(2)}` : '—'
-  $('#wBlocker').textContent = `${zustand.guards} · ${zustand.blocker}`
+  $('#wBlocker').textContent = `${zustand.guards} · ${zustand.fragen || 0}`
+  $('#fragenzahl').textContent = zustand.fragen ? String(zustand.fragen) : ''
   $('#zBlocker').classList.toggle('hat', zustand.guards > 0)
   $('#fusszeile').textContent =
     `AUTONOMER LOOP · ${zustand.projektName || '—'} · M 1:1`
@@ -569,6 +574,13 @@ function verarbeite (e) {
     case 'kosten':
       zustand.kosten = e.usd
       break
+    case 'fragenstand':
+      zustand.fragen = e.anzahl
+      break
+    case 'frage':
+      zustand.fragen = (zustand.fragen || 0) + 0
+      stromZeile({ werkzeug: 'FRAGE', text: e.text })
+      break
     case 'pr':
       zustand.pr = e.url
       stromZeile({ text: 'Pull Request offen: ' + e.url, system: true })
@@ -780,6 +792,28 @@ async function blattEinstellungen () {
   })
 }
 
+async function blattFragen () {
+  if (!zustand.projekt) return melde('Erst ein Projekt waehlen.', true)
+  zeigeBlatt('FRAGEN', async (k) => {
+    let daten
+    try { daten = await hole('/api/projekt?pfad=' + encodeURIComponent(zustand.projekt)) } catch (f) { k.innerHTML = `<div class="hinweis warn">${escape_(f.message)}</div>`; return }
+    const eintraege = String(daten.fragen || '').split(SPLIT_ZEILEN).filter(z => /^\s*[-*]\s+\S/.test(z))
+    k.innerHTML = '<div class="hinweis">Hier steht, was der Chef bewusst NICHT entschieden hat: ' +
+      'neue Abhaengigkeiten, Migrationen, Aenderungen an bestehenden Tests. ' +
+      'Er ueberspringt solche Aufgaben und arbeitet weiter — entscheiden musst du.</div>'
+    if (!eintraege.length) {
+      k.innerHTML += '<div class="hinweis ok">Keine offenen Fragen.</div>'
+      return
+    }
+    for (const e of eintraege) {
+      const d = document.createElement('div')
+      d.className = 'frageneintrag'
+      d.textContent = e.replace(/^\s*[-*]\s+/, '')
+      k.appendChild(d)
+    }
+  })
+}
+
 // ------------------------------------------------------------ Start / Stop
 
 $('#startknopf').onclick = async () => {
@@ -811,7 +845,10 @@ $('#startknopf').onclick = async () => {
 
 for (const knopf of document.querySelectorAll('[data-blatt]')) {
   knopf.onclick = () => ({
-    projekt: blattProjekt, aufgaben: blattAufgaben, einstellungen: blattEinstellungen
+    projekt: blattProjekt,
+    aufgaben: blattAufgaben,
+    fragen: blattFragen,
+    einstellungen: blattEinstellungen
   })[knopf.dataset.blatt]()
 }
 
