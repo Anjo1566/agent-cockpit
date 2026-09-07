@@ -91,7 +91,7 @@ function lies (projekt, rel, ersatz = '') {
 
 // --- Routen --------------------------------------------------------------
 
-const server = http.createServer(async (anfrage, antwort) => {
+const behandeln = async (anfrage, antwort) => {
   const url = new URL(anfrage.url, 'http://localhost')
   const weg = url.pathname
 
@@ -188,7 +188,14 @@ const server = http.createServer(async (anfrage, antwort) => {
   } catch (f) {
     json(antwort, 400, { fehler: f.message })
   }
-})
+}
+
+const server = http.createServer(behandeln)
+
+// Zweiter Zuhoerer auf ::1. Chrome loest "localhost" bevorzugt nach IPv6 auf;
+// horcht der Server nur auf 127.0.0.1, laeuft die Verbindung ins Leere.
+// Beides bleibt auf dem Loopback -- nichts davon ist im Netz erreichbar.
+const serverV6 = http.createServer(behandeln)
 
 function browserOeffnen (adresse) {
   if (process.env.COCKPIT_KEIN_BROWSER) return
@@ -254,7 +261,12 @@ function starten (port, versuche = 10) {
   })
 
   server.listen(port, '127.0.0.1', () => {
-    const adresse = `http://127.0.0.1:${port}`
+    // Auch auf IPv6 horchen. Schlaegt das fehl (kein IPv6 auf dem Rechner),
+    // ist das kein Grund, den Start abzubrechen.
+    serverV6.on('error', () => {})
+    serverV6.listen(port, '::1')
+
+    const adresse = `http://localhost:${port}`
     // Bewusst nur ASCII: das Windows-Konsolenfenster laeuft nicht auf UTF-8,
     // und ein Gedankenstrich wird dort zu Zeichensalat -- ausgerechnet in der
     // ersten Zeile, die der Nutzer ueberhaupt zu sehen bekommt.
@@ -262,10 +274,19 @@ function starten (port, versuche = 10) {
     console.log('  REISSBRETT - Cockpit fuer den Agenten-Loop')
     console.log('  ' + '-'.repeat(43))
     console.log(`  Offen unter   ${adresse}`)
+    console.log(`  oder          http://127.0.0.1:${port}`)
     console.log(`  Projekte aus  ${WURZEL}`)
     console.log(`  Scaffold aus  ${SCAFFOLD}${fs.existsSync(path.join(SCAFFOLD, 'loop.sh')) ? '' : '   << FEHLT!'}`)
     console.log('')
     console.log('  Beenden mit Strg+C.')
+    console.log('')
+    console.log('  Zeigt der Browser ERR_SSL_PROTOCOL_ERROR, dann erzwingt er')
+    console.log('  HTTPS. Das Cockpit spricht nur HTTP, weil es den Rechner')
+    console.log('  nie verlaesst. Abhilfe in Chrome:')
+    console.log('    Einstellungen > Datenschutz und Sicherheit > Sicherheit')
+    console.log('    > "Immer sichere Verbindungen verwenden" ausschalten,')
+    console.log('    oder unter chrome://net-internals/#hsts bei "Delete domain')
+    console.log('    security policies" localhost und 127.0.0.1 loeschen.')
     console.log('')
     browserOeffnen(adresse)
   })

@@ -58,6 +58,30 @@ http://127.0.0.1:4173/?probe=guard    der Moment, in dem ein Guard blockt
 
 Kostet nichts, startet nichts, braucht kein Projekt.
 
+## Wenn der Browser meckert
+
+**`ERR_SSL_PROTOCOL_ERROR` / „kann keine sichere Verbindung bereitstellen"**
+
+Chrome ruft die Adresse als `https` auf. Das Cockpit spricht nur `http` — es
+verlässt den Rechner nie, eine Verschlüsselung gegen sich selbst brächte
+nichts. Drei Wege, von schnell nach dauerhaft:
+
+1. **`http://localhost:4173` statt `127.0.0.1`.** Chrome merkt sich den
+   HTTPS-Zwang pro Hostname; `localhost` ist meist nicht betroffen. Deshalb
+   öffnet das Cockpit diese Adresse von sich aus.
+2. **Den gemerkten Zwang löschen:** `chrome://net-internals/#hsts` öffnen, unten
+   bei *Delete domain security policies* nacheinander `127.0.0.1` und
+   `localhost` eintragen und auf *Delete* klicken.
+3. **Die Einstellung abschalten:** Einstellungen → Datenschutz und Sicherheit →
+   Sicherheit → *Immer sichere Verbindungen verwenden* aus.
+
+**Die Seite lädt gar nicht.** Schau ins schwarze Fenster, das `cockpit.cmd`
+geöffnet hat — dort steht, was fehlt. Läuft schon ein Cockpit, sagt es das und
+öffnet stattdessen jenes.
+
+**Das Fenster geht auf und sofort wieder zu.** Dann fehlt Node.js. Hol es von
+[nodejs.org](https://nodejs.org) und starte `cockpit.cmd` neu.
+
 ## Einstellungen des Cockpits selbst
 
 Als Umgebungsvariablen, alle optional:
