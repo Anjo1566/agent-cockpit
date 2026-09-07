@@ -656,13 +656,39 @@ async function blattProjekt () {
         gewaehlt = p.pfad
         if (!p.eingerichtet) {
           if (!confirm(`Den Loop in "${p.name}" einrichten?\n\nKopiert Guards, Charta und loop.sh hinein. Vorhandene TASKS.md, STATUS.md und QUESTIONS.md bleiben unangetastet.`)) return
+          let antwort
           try {
-            await hole('/api/installieren', {
+            antwort = await hole('/api/installieren', {
               method: 'POST', headers: { 'content-type': 'application/json' },
               body: JSON.stringify({ pfad: p.pfad })
             })
-            melde(`Loop in ${p.name} eingerichtet.`)
           } catch (f) { melde(f.message, true); return }
+
+          // Die Warnungen sind der wichtigste Teil der Einrichtung: ohne Tests
+          // oder mit falschem Testbefehl liefe der Loop ohne Bremse. Sie
+          // gehoeren vor Augen, nicht in eine Meldung, die nach fuenf Sekunden
+          // verschwindet.
+          const bericht = antwort.bericht || {}
+          const warnungen = bericht.warnungen || []
+          if (warnungen.length) {
+            zeigeBlatt('EINRICHTUNG · ' + p.name.toUpperCase(), (k) => {
+              k.innerHTML =
+                warnungen.map(t => `<div class="hinweis warn">${escape_(t)}</div>`).join('') +
+                `<div class="hinweis">Zielbranch <code>${escape_(bericht.zweig || '?')}</code>` +
+                ` · Testbefehl <code>${escape_((bericht.test && bericht.test.befehl) || 'nicht gesetzt')}</code>` +
+                ` · ${bericht.committet ? 'committet' : 'NICHT committet'}</div>`
+              const fuss = document.createElement('div')
+              fuss.className = 'sheet-fuss'
+              const zu = document.createElement('button')
+              zu.className = 'knopf'
+              zu.textContent = 'Verstanden'
+              zu.onclick = schliesseBlatt
+              fuss.appendChild(zu)
+              k.appendChild(fuss)
+            })
+          } else {
+            melde(`Loop in ${p.name} eingerichtet und committet.`)
+          }
         }
         zustand.projekt = p.pfad
         zustand.projektName = p.name

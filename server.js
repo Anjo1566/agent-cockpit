@@ -148,11 +148,9 @@ const behandeln = async (anfrage, antwort) => {
     if (weg === '/api/installieren' && anfrage.method === 'POST') {
       const k = await koerperLesen(anfrage)
       const p = projektPfad(k.pfad)
+      // Der Testbefehl und der Zielbranch werden in installiere() gesetzt --
+      // dort ist auch bekannt, ob geraten wurde oder nicht.
       const bericht = projekte.installiere(p, SCAFFOLD)
-      // Den geratenen Testbefehl gleich eintragen, damit der erste Lauf laeuft.
-      try {
-        konfig.schreib(p, { TESTBEFEHL: k.testbefehl || projekte.testbefehlRaten(p) })
-      } catch { /* der Nutzer kann ihn in den Einstellungen setzen */ }
       return json(antwort, 200, { bericht, projekt: projekte.details(p) })
     }
 
