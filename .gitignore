@@ -1,2 +1,7 @@
 .zertifikat/
 node_modules/
+
+# Laufzeitzustand des Agenten-Loops. Die Hooks sind die Ausnahme:
+# sie sind die Schutzmechanismen und muessen versioniert sein.
+/.agents/*
+!/.agents/hooks/
