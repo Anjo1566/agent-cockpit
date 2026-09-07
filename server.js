@@ -154,6 +154,11 @@ const behandeln = async (anfrage, antwort) => {
       return json(antwort, 200, { bericht, projekt: projekte.details(p) })
     }
 
+    if (weg === '/api/anlegen' && anfrage.method === 'POST') {
+      const k = await koerperLesen(anfrage)
+      return json(antwort, 200, projekte.anlegen(WURZEL, k.name, SCAFFOLD, !!k.leer))
+    }
+
     if (weg === '/api/tasks' && anfrage.method === 'POST') {
       const k = await koerperLesen(anfrage)
       const p = projektPfad(k.pfad)

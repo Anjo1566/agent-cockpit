@@ -651,6 +651,17 @@ async function blattProjekt () {
       k.appendChild(h)
     }
 
+    const kopfzeile = document.createElement('div')
+    kopfzeile.className = 'sheet-fuss'
+    kopfzeile.style.margin = '0 0 14px'
+    kopfzeile.style.justifyContent = 'flex-start'
+    const neuKnopf = document.createElement('button')
+    neuKnopf.className = 'knopf'
+    neuKnopf.textContent = 'Neues Projekt'
+    neuKnopf.onclick = blattNeu
+    kopfzeile.appendChild(neuKnopf)
+    k.appendChild(kopfzeile)
+
     const liste = document.createElement('div')
     liste.className = 'projektliste'
     for (const p of projekte) {
@@ -811,6 +822,76 @@ async function blattFragen () {
       d.textContent = e.replace(/^\s*[-*]\s+/, '')
       k.appendChild(d)
     }
+  })
+}
+
+async function blattNeu () {
+  zeigeBlatt('NEUES PROJEKT', (k) => {
+    k.innerHTML =
+      '<div class="hinweis">Legt einen Ordner an, macht ihn zum Git-Repository und ' +
+      'richtet den Loop darin ein. Die Spielwiese bringt eine kleine Funktion, ' +
+      'echte Tests und zwei Aufgaben mit — damit ist sie sofort startklar. ' +
+      'Ein leeres Projekt hat keine Tests, und ohne Tests laeuft der Loop ohne Bremse.</div>'
+
+    const zeile = document.createElement('div')
+    zeile.className = 'feld'
+    const label = document.createElement('label')
+    label.textContent = 'Name'
+    const rechts = document.createElement('div')
+    const eingabe = document.createElement('input')
+    eingabe.type = 'text'
+    eingabe.placeholder = 'spielwiese'
+    const hilfe = document.createElement('div')
+    hilfe.className = 'hilfe'
+    hilfe.textContent = 'Buchstaben, Ziffern, Punkt, Bindestrich, Unterstrich.'
+    rechts.append(eingabe, hilfe)
+    zeile.append(label, rechts)
+    k.appendChild(zeile)
+
+    const wahl = document.createElement('div')
+    wahl.className = 'feld'
+    const wlabel = document.createElement('label')
+    wlabel.textContent = 'Vorlage'
+    const wrechts = document.createElement('div')
+    wrechts.innerHTML =
+      '<label style="display:block;margin-bottom:8px;font-family:var(--font-mono);font-size:12.5px">' +
+      '<input type="radio" name="vorlage" value="spielwiese" checked> Spielwiese mit Tests (empfohlen)</label>' +
+      '<label style="display:block;font-family:var(--font-mono);font-size:12.5px">' +
+      '<input type="radio" name="vorlage" value="leer"> Leer</label>'
+    wahl.append(wlabel, wrechts)
+    k.appendChild(wahl)
+
+    const fuss = document.createElement('div')
+    fuss.className = 'sheet-fuss'
+    const anlegen = document.createElement('button')
+    anlegen.className = 'knopf'
+    anlegen.textContent = 'Anlegen'
+    anlegen.onclick = async () => {
+      anlegen.disabled = true
+      const leer = k.querySelector('input[name="vorlage"]:checked').value === 'leer'
+      try {
+        const a = await hole('/api/anlegen', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ name: eingabe.value, leer })
+        })
+        zustand.projekt = a.pfad
+        zustand.projektName = a.name
+        try { localStorage.setItem('cockpit.projekt', a.pfad) } catch { /* privater Modus */ }
+        render()
+        const w = (a.bericht && a.bericht.warnungen) || []
+        schliesseBlatt()
+        melde(w.length
+          ? `${a.name} angelegt — mit ${w.length} Hinweis${w.length > 1 ? 'en' : ''}, siehe Projektliste.`
+          : `${a.name} angelegt und startklar.`, w.length > 0)
+      } catch (f) {
+        melde(f.message, true)
+        anlegen.disabled = false
+      }
+    }
+    fuss.appendChild(anlegen)
+    k.appendChild(fuss)
+    eingabe.focus()
+    eingabe.onkeydown = (e) => { if (e.key === 'Enter') anlegen.click() }
   })
 }
 
