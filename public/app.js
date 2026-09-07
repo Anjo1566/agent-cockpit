@@ -726,6 +726,15 @@ async function blattProjekt () {
   })
 }
 
+// Das Cockpit commitet, was es selbst schreibt -- sonst wuerde die eigene
+// Aenderung spaeter den Start blockieren. Klappt der Commit nicht, muss man
+// es hier erfahren und nicht erst beim Startversuch.
+function sicherungsHinweis (g) {
+  if (!g || g.stand === 'nichts') return ''
+  if (g.stand === 'committet') return ' Und committet.'
+  return ` Aber nicht committet: ${g.grund} Solange das offen liegt, verweigert der Start.`
+}
+
 async function blattAufgaben () {
   if (!zustand.projekt) return melde('Erst ein Projekt wählen.', true)
   zeigeBlatt('AUFGABEN', async (k) => {
@@ -743,11 +752,13 @@ async function blattAufgaben () {
     sichern.className = 'knopf'; sichern.textContent = 'Sichern'
     sichern.onclick = async () => {
       try {
-        await hole('/api/tasks', {
+        const a = await hole('/api/tasks', {
           method: 'POST', headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ pfad: zustand.projekt, text: feld.value })
         })
-        melde('Aufgaben gesichert.'); schliesseBlatt()
+        melde('Aufgaben gesichert.' + sicherungsHinweis(a.gesichert),
+          a.gesichert && a.gesichert.stand === 'fehler')
+        schliesseBlatt()
       } catch (f) { melde(f.message, true) }
     }
     fuss.appendChild(sichern)
@@ -791,11 +802,13 @@ async function blattEinstellungen () {
       const werte = {}
       for (const [name, e] of Object.entries(eingaben)) werte[name] = e.value
       try {
-        await hole('/api/konfig', {
+        const a = await hole('/api/konfig', {
           method: 'POST', headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ pfad: zustand.projekt, werte })
         })
-        melde('Einstellungen gesichert.'); schliesseBlatt()
+        melde('Einstellungen gesichert.' + sicherungsHinweis(a.gesichert),
+          a.gesichert && a.gesichert.stand === 'fehler')
+        schliesseBlatt()
       } catch (f) { melde(f.message, true) }
     }
     fuss.appendChild(sichern)

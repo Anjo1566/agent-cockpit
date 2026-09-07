@@ -164,13 +164,18 @@ const behandeln = async (anfrage, antwort) => {
       const p = projektPfad(k.pfad)
       if (typeof k.text !== 'string') throw new Error('Kein Text.')
       fs.writeFileSync(path.join(p, 'TASKS.md'), k.text.replace(/\r\n/g, '\n'), 'utf8')
-      return json(antwort, 200, { tasks: lies(p, 'TASKS.md') })
+      // Sofort committen: sonst blockiert der eigene Backlog-Eintrag den Start.
+      const gesichert = projekte.sichere(p, ['TASKS.md'], 'Update the backlog')
+      return json(antwort, 200, { tasks: lies(p, 'TASKS.md'), gesichert })
     }
 
     if (weg === '/api/konfig' && anfrage.method === 'POST') {
       const k = await koerperLesen(anfrage)
       const p = projektPfad(k.pfad)
-      return json(antwort, 200, konfig.schreib(p, k.werte || {}))
+      const stand = konfig.schreib(p, k.werte || {})
+      // loop.sh ist versioniert -- ohne Commit bleibt das Verzeichnis schmutzig.
+      const gesichert = projekte.sichere(p, ['loop.sh'], 'Update the loop configuration')
+      return json(antwort, 200, { ...stand, gesichert })
     }
 
     if (weg === '/api/start' && anfrage.method === 'POST') {
