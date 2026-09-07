@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reissbrett — Agenten-Loop</title>
+<link rel="stylesheet" href="/stil.css">
+</head>
+<body>
+
+<!-- [1] KOPFLEISTE -->
+<header class="kopf">
+  <div class="kopf-links">
+    <span class="wortmarke">REISSBRETT</span>
+    <span class="repo" id="repo">kein Projekt gewählt</span>
+  </div>
+  <div class="kopf-mitte">
+    <span class="statuswort" id="statuswort">BEREIT</span>
+    <span class="uhr" id="uhr">00:00.0</span>
+  </div>
+  <div class="kopf-rechts">
+    <button class="knopf" data-blatt="projekt">Projekt</button>
+    <button class="knopf" data-blatt="aufgaben">Aufgaben</button>
+    <button class="knopf" data-blatt="einstellungen">Einstellungen</button>
+    <button class="knopf knopf-start" id="startknopf">Starten</button>
+    <span class="live" id="live"><i></i>LIVE</span>
+  </div>
+</header>
+
+<!-- [2] ZEICHENFLÄCHE -->
+<main class="blattflaeche">
+  <div class="blatt">
+    <svg id="riss" viewBox="0 0 1200 720" preserveAspectRatio="xMidYMid meet" aria-label="Organigramm des Loops">
+      <defs>
+        <!-- Das Raster liegt IM SVG, damit es exakt zur Zeichnung passt und
+             nicht daneben schwebt, sobald das Fenster eine krumme Breite hat. -->
+        <pattern id="rasterFein" width="8" height="8" patternUnits="userSpaceOnUse">
+          <path d="M8 0H0V8" fill="none" stroke="var(--grid-minor)" stroke-width="1"/>
+        </pattern>
+        <pattern id="rasterGrob" width="64" height="64" patternUnits="userSpaceOnUse">
+          <rect width="64" height="64" fill="url(#rasterFein)"/>
+          <path d="M64 0H0V64" fill="none" stroke="var(--grid-major)" stroke-width="1"/>
+        </pattern>
+        <clipPath id="clipChef"><rect id="clipChefR" x="450" y="72" width="300" height="120"/></clipPath>
+        <clipPath id="clipCoder"><rect id="clipCoderR" x="100" y="452" width="300" height="120"/></clipPath>
+        <clipPath id="clipReviewer"><rect id="clipReviewerR" x="800" y="452" width="300" height="120"/></clipPath>
+      </defs>
+
+      <rect class="rasterflaeche" x="0" y="0" width="1200" height="720" fill="url(#rasterGrob)"/>
+
+      <!-- Blattrahmen mit Passkreuzen -->
+      <g class="rahmen">
+        <path class="rahmenlinie" d="M24 24 H1176"/>
+        <path class="rahmenlinie" d="M1176 24 V696"/>
+        <path class="rahmenlinie" d="M1176 696 H24"/>
+        <path class="rahmenlinie" d="M24 696 V24"/>
+      </g>
+
+      <!-- Wasserzeichen: die Rundennummer, hinter allem -->
+      <text id="wasserzeichen" class="wasserzeichen" x="600" y="410" text-anchor="middle">00</text>
+      <g class="fadenkreuz">
+        <path d="M590 344 H610"/><path d="M600 334 V354"/>
+      </g>
+      <text id="mittenmarke" class="mittenmarke" x="614" y="366">bereit</text>
+
+      <!-- Kanten -->
+      <g id="kanten">
+        <g class="kante" data-kante="e1">
+          <path class="kantenlinie" d="M530 206 V306 A24 24 0 0 1 506 330 H274 A24 24 0 0 0 250 354 V438"/>
+          <path class="kantenschweif" d="M530 206 V306 A24 24 0 0 1 506 330 H274 A24 24 0 0 0 250 354 V438"/>
+          <g class="kantenlabel" transform="translate(390,330)">
+            <rect x="-34" y="-9" width="68" height="18"/>
+            <text y="4" text-anchor="middle">AUFTRAG</text>
+          </g>
+        </g>
+        <g class="kante" data-kante="e2">
+          <path class="kantenlinie" d="M414 512 H786"/>
+          <path class="kantenschweif" d="M414 512 H786"/>
+          <g class="kantenlabel" transform="translate(600,512)">
+            <rect x="-30" y="-9" width="60" height="18"/>
+            <text y="4" text-anchor="middle">ABGABE</text>
+          </g>
+        </g>
+        <g class="kante" data-kante="e3">
+          <path class="kantenlinie" d="M950 438 V354 A24 24 0 0 0 926 330 H694 A24 24 0 0 1 670 306 V206"/>
+          <path class="kantenschweif" d="M950 438 V354 A24 24 0 0 0 926 330 H694 A24 24 0 0 1 670 306 V206"/>
+          <g class="kantenlabel" transform="translate(810,330)">
+            <rect x="-28" y="-9" width="56" height="18"/>
+            <text y="4" text-anchor="middle">BEFUND</text>
+          </g>
+        </g>
+      </g>
+
+      <!-- Der wandernde Token bei der Übergabe -->
+      <g id="token" class="token" hidden>
+        <rect x="-3.5" y="-3.5" width="7" height="7"/>
+        <path class="tokenkreuz" d="M-6 0 H6 M0 -6 V6"/>
+      </g>
+
+      <!-- Bauteile -->
+      <g id="knoten"></g>
+
+      <!-- Sperrtafel -->
+      <g id="sperrtafel" class="sperrtafel" hidden></g>
+    </svg>
+  </div>
+</main>
+
+<!-- [3] EREIGNISSTROM -->
+<aside class="strom">
+  <div class="strom-kopf">
+    <span>EREIGNISSTROM</span>
+    <span id="stromzahl">0</span>
+  </div>
+  <div class="strom-liste" id="stromliste"></div>
+  <div class="zeitachse"></div>
+</aside>
+
+<!-- [4] RUNDENBAND -->
+<section class="rundenband">
+  <div class="rundenzahl">
+    <span id="rundeGross">00</span><span id="rundeVon"> / 00</span>
+  </div>
+  <svg id="band" viewBox="0 0 900 100" preserveAspectRatio="none" aria-label="Rundenband"></svg>
+</section>
+
+<!-- [5] SCHRIFTFELD -->
+<section class="schriftfeld">
+  <div class="zelle"><span class="label">RUNDE</span><span class="wert" id="wRunde">—</span></div>
+  <div class="zelle"><span class="label">MODELL</span><span class="wert" id="wModell">—</span></div>
+  <div class="zelle"><span class="label">LAUFZEIT</span><span class="wert" id="wZeit">—</span></div>
+  <div class="zelle" id="zTests"><span class="label">TESTS</span><span class="wert" id="wTests">—</span></div>
+  <div class="zelle"><span class="label">KOSTEN</span><span class="wert" id="wKosten">—</span></div>
+  <div class="zelle" id="zBlocker"><span class="label">GESPERRT/FRAGEN</span><span class="wert" id="wBlocker">—</span></div>
+  <div class="fusszeile" id="fusszeile">AUTONOMER LOOP · M 1:1</div>
+</section>
+
+<!-- Blätter: Projekt, Aufgaben, Einstellungen -->
+<div class="blattdeck" id="blattdeck" hidden>
+  <div class="sheet" id="sheet">
+    <div class="sheet-kopf">
+      <span id="sheetTitel">PROJEKT</span>
+      <button class="knopf knopf-klein" id="sheetZu">Schliessen</button>
+    </div>
+    <div class="sheet-koerper" id="sheetKoerper"></div>
+  </div>
+</div>
+
+<div class="melder" id="melder" hidden></div>
+
+<script src="/app.js"></script>
+</body>
+</html>
