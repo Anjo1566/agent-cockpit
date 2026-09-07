@@ -28,6 +28,7 @@ const zustand = {
   rolle: null, auftrag: null, werkzeug: null,
   seit: null, letztesEreignis: null, start: null,
   tests: { anzahl: null, gruen: null }, kosten: 0, blocker: 0, guards: 0,
+  note: null, zielnote: null, notenband: [], turns: 0, fragen: 0,
   rundenband: [], gesperrt: null, ende: null, pr: null,
   takte: { chef: [], coder: [], reviewer: [] },
   phasendauer: { chef: null, coder: null, reviewer: null },
@@ -232,10 +233,22 @@ function render () {
     : `${zustand.tests.anzahl} ${zustand.tests.gruen === false ? '✗' : '✓'}`
   $('#zTests').classList.toggle('gruen', zustand.tests.gruen === true)
   $('#zTests').classList.toggle('rot', zustand.tests.gruen === false)
-  $('#wKosten').textContent = zustand.kosten ? `$${zustand.kosten.toFixed(2)}` : '—'
-  $('#wBlocker').textContent = `${zustand.guards} · ${zustand.fragen || 0}`
+  // Die Note ist die einzige Zahl hier, die etwas ueber das Ergebnis sagt --
+  // Runden und Kosten sagen nur etwas ueber den Aufwand.
+  const erreicht = zustand.note != null && zustand.zielnote != null &&
+    zustand.note >= zustand.zielnote
+  $('#wNote').textContent = zustand.note == null
+    ? '—'
+    : zustand.note.toFixed(1) + (zustand.zielnote ? ' / ' + zustand.zielnote : '')
+  $('#zNote').classList.toggle('gruen', erreicht)
+  $('#zNote').classList.toggle('rot', zustand.note != null && !erreicht)
+  $('#wKosten').textContent = zustand.kosten ? `${zustand.kosten.toFixed(2)}` : '—'
+  $('#wTurns').textContent = zustand.turns ? String(zustand.turns) : '—'
+  $('#wGesperrt').textContent = zustand.laeuft || zustand.guards ? String(zustand.guards) : '—'
+  $('#wFragen').textContent = zustand.laeuft || zustand.fragen ? String(zustand.fragen || 0) : '—'
   $('#fragenzahl').textContent = zustand.fragen ? String(zustand.fragen) : ''
-  $('#zBlocker').classList.toggle('hat', zustand.guards > 0)
+  $('#zGesperrt').classList.toggle('hat', zustand.guards > 0)
+  $('#zFragen').classList.toggle('hat', (zustand.fragen || 0) > 0)
   $('#fusszeile').textContent =
     `AUTONOMER LOOP · ${zustand.projektName || '—'} · M 1:1`
 
@@ -514,7 +527,10 @@ function verarbeite (e) {
         laeuft: e.laeuft, projekt: e.projekt, runde: e.runde, runden: e.runden,
         modell: e.modell, aufwand: e.aufwand, rolle: e.rolle, auftrag: e.auftrag,
         seit: e.seit, start: e.start, tests: e.tests || zustand.tests,
-        kosten: e.kosten || 0, guards: e.guards || 0, letztesEreignis: e.letztesEreignis
+        kosten: e.kosten || 0, guards: e.guards || 0, letztesEreignis: e.letztesEreignis,
+        note: e.note ?? null, zielnote: e.zielnote ?? null,
+        notenband: e.notenband || zustand.notenband,
+        turns: e.turns || 0, fragen: e.fragen || 0
       })
       if (e.projekt) zustand.projektName = e.projekt.split(/[\\/]/).pop()
       break
@@ -523,7 +539,8 @@ function verarbeite (e) {
         laeuft: true, projekt: e.projekt, runden: e.runden, start: Date.now(),
         seit: Date.now(), letztesEreignis: Date.now(), ende: null, pr: null,
         rundenband: [], takte: { chef: [], coder: [], reviewer: [] },
-        kantenzustand: { e1: 'bereit', e2: 'ghost', e3: 'ghost' }, guards: 0, kosten: 0
+        kantenzustand: { e1: 'bereit', e2: 'ghost', e3: 'ghost' }, guards: 0, kosten: 0,
+        note: null, notenband: [], turns: 0, fragen: 0
       })
       zustand.projektName = e.projekt.split(/[\\/]/).pop()
       stromliste.textContent = ''; letzteRundeImStrom = 0
@@ -573,6 +590,22 @@ function verarbeite (e) {
       break
     case 'kosten':
       zustand.kosten = e.usd
+      zustand.turns = e.turns || zustand.turns
+      break
+    case 'note':
+      zustand.zielnote = e.ziel ?? zustand.zielnote
+      if (e.note == null) {
+        stromZeile({ werkzeug: 'NOTE', text: 'Diese Runde hat keine Note hinterlassen.' })
+        break
+      }
+      zustand.note = e.note
+      zustand.notenband.push({ i: e.i, note: e.note })
+      stromZeile({
+        werkzeug: 'NOTE',
+        text: e.note.toFixed(1) + ' von 10' +
+          (e.ziel ? ' (Ziel ' + e.ziel + ')' : '') +
+          (e.begruendung ? ' — ' + e.begruendung : '')
+      })
       break
     case 'fragenstand':
       zustand.fragen = e.anzahl
@@ -782,7 +815,11 @@ async function blattEinstellungen () {
       label.textContent = feld.titel
       const rechts = document.createElement('div')
       const eingabe = document.createElement('input')
-      eingabe.type = feld.typ === 'zahl' ? 'number' : 'text'
+      const zahlenfeld = feld.typ === 'zahl' || feld.typ === 'dezimal'
+      eingabe.type = zahlenfeld ? 'number' : 'text'
+      // Ohne step verweigert ein number-Feld die 8.5, die es anzeigen soll.
+      if (feld.schritt != null) eingabe.step = feld.schritt
+      else if (zahlenfeld) eingabe.step = 1
       if (feld.min != null) eingabe.min = feld.min
       if (feld.max != null) eingabe.max = feld.max
       eingabe.value = daten.konfig.werte[feld.name] ?? ''

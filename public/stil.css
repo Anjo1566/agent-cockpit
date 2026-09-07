@@ -69,7 +69,7 @@ body {
   overflow: hidden;
   display: grid;
   grid-template-columns: 1fr 380px;
-  grid-template-rows: 46px 1fr 132px;
+  grid-template-rows: 46px 1fr 150px;
 }
 
 /* ---------------------------------------------------------------- Kopfleiste */
@@ -339,7 +339,7 @@ body {
   grid-column: 2; grid-row: 3;
   border-top: 1px solid var(--line-hair); border-left: 1px solid var(--line-hair);
   background: var(--ink-020);
-  display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: 1fr 1fr 18px;
+  display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr) 18px;
 }
 .zelle {
   border-right: 1px solid var(--line-hair); border-bottom: 1px solid var(--line-hair);
@@ -356,8 +356,15 @@ body {
 #zTests.gruen { box-shadow: inset 0 -2px 0 -1px var(--gruen); }
 #zTests.rot .wert { color: var(--rot); }
 #zTests.rot { box-shadow: inset 2px 0 0 0 var(--rot); }
-#zBlocker.hat .wert { color: var(--rot); }
-#zBlocker.hat { box-shadow: inset 2px 0 0 0 var(--rot); }
+/* Die Note ist der Befund des Laufs: erreicht sie das Ziel, ist er zu Ende. */
+#zNote.gruen .wert { color: var(--gruen); }
+#zNote.gruen { box-shadow: inset 0 -2px 0 -1px var(--gruen); }
+#zNote.rot .wert { color: var(--akzent); }
+#zNote.rot { box-shadow: inset 2px 0 0 0 var(--akzent); }
+#zGesperrt.hat .wert { color: var(--rot); }
+#zGesperrt.hat { box-shadow: inset 2px 0 0 0 var(--rot); }
+#zFragen.hat .wert { color: var(--akzent); }
+#zFragen.hat { box-shadow: inset 2px 0 0 0 var(--akzent); }
 .fusszeile {
   grid-column: 1 / -1; display: flex; align-items: center; padding: 0 9px;
   font-size: 9px; font-weight: 600; letter-spacing: .14em; color: var(--text-low);
