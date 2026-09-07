@@ -52,28 +52,36 @@ die gerade arbeitet. Genau **eine** Kante ist amber, und nur während der
 ## Vorher anschauen, ohne etwas zu starten
 
 ```
-http://127.0.0.1:4173/?probe=1        eine Runde im Zeitraffer
-http://127.0.0.1:4173/?probe=guard    der Moment, in dem ein Guard blockt
+https://localhost:4173/?probe=1        eine Runde im Zeitraffer
+https://localhost:4173/?probe=guard    der Moment, in dem ein Guard blockt
 ```
 
 Kostet nichts, startet nichts, braucht kein Projekt.
 
 ## Wenn der Browser meckert
 
-**`ERR_SSL_PROTOCOL_ERROR` / „kann keine sichere Verbindung bereitstellen"**
+**„Diese Website kann keine sichere Verbindung bereitstellen" /
+`ERR_SSL_PROTOCOL_ERROR`**
 
-Chrome ruft die Adresse als `https` auf. Das Cockpit spricht nur `http` — es
-verlässt den Rechner nie, eine Verschlüsselung gegen sich selbst brächte
-nichts. Drei Wege, von schnell nach dauerhaft:
+Manche Chrome-Einstellungen stufen *jede* `http`-Adresse auf `https` hoch, auch
+`localhost`. Der Browser schickt dann einen TLS-Handshake, und ein reiner
+HTTP-Server kann darauf nichts Sinnvolles antworten.
 
-1. **`http://localhost:4173` statt `127.0.0.1`.** Chrome merkt sich den
-   HTTPS-Zwang pro Hostname; `localhost` ist meist nicht betroffen. Deshalb
-   öffnet das Cockpit diese Adresse von sich aus.
-2. **Den gemerkten Zwang löschen:** `chrome://net-internals/#hsts` öffnen, unten
-   bei *Delete domain security policies* nacheinander `127.0.0.1` und
-   `localhost` eintragen und auf *Delete* klicken.
-3. **Die Einstellung abschalten:** Einstellungen → Datenschutz und Sicherheit →
-   Sicherheit → *Immer sichere Verbindungen verwenden* aus.
+Deshalb spricht das Cockpit beides — auf demselben Port, unterschieden am ersten
+Byte der Verbindung. Es erzeugt sich beim ersten Start ein eigenes Zertifikat
+(braucht `openssl`, das bei Git für Windows dabei ist) und legt es in
+`.zertifikat/` ab. Das gilt nur für `localhost`, `127.0.0.1` und `::1` auf
+diesem Rechner und wird nicht mit ins Repository genommen.
+
+Weil das Zertifikat selbst signiert ist, warnt Chrome beim ersten Aufruf. Zwei
+Wege:
+
+- **Einmal durchklicken:** *Erweitert* → *Weiter zu localhost (unsicher)*.
+  Chrome merkt sich das.
+- **Ein für alle Mal:** Doppelklick auf **`zertifikat-vertrauen.cmd`**. Windows
+  fragt einmal nach, danach ist die Warnung weg. Braucht keine
+  Administratorrechte — das Zertifikat landet nur in deinem eigenen Speicher.
+  Rückgängig mit `zertifikat-vergessen.cmd`.
 
 **Die Seite lädt gar nicht.** Schau ins schwarze Fenster, das `cockpit.cmd`
 geöffnet hat — dort steht, was fehlt. Läuft schon ein Cockpit, sagt es das und

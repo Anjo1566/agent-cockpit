@@ -12,12 +12,15 @@
 // Projekt schreiben; er gehoert deshalb nicht ins Netz.
 
 const http = require('node:http')
+const https = require('node:https')
+const net = require('node:net')
 const fs = require('node:fs')
 const path = require('node:path')
 const { execFile } = require('node:child_process')
 
 const projekte = require('./lib/projekte.js')
 const konfig = require('./lib/konfig.js')
+const zertifikat = require('./lib/zertifikat.js')
 const { Lauf } = require('./lib/lauf.js')
 
 const PORT = Number(process.env.COCKPIT_PORT || 4173)
@@ -190,12 +193,53 @@ const behandeln = async (anfrage, antwort) => {
   }
 }
 
-const server = http.createServer(behandeln)
+const httpServer = http.createServer(behandeln)
 
-// Zweiter Zuhoerer auf ::1. Chrome loest "localhost" bevorzugt nach IPv6 auf;
-// horcht der Server nur auf 127.0.0.1, laeuft die Verbindung ins Leere.
+// Chrome kann so eingestellt sein, dass es jede http-Adresse auf https
+// hochstuft -- auch localhost. Dann schickt es einen TLS-Handshake an den
+// HTTP-Port, und der Nutzer sieht nur ERR_SSL_PROTOCOL_ERROR. Statt zu
+// verlangen, dass er dafuer eine Sicherheitseinstellung aufweicht, spricht das
+// Cockpit beides: auf demselben Port, unterschieden am ersten Byte.
+const zert = zertifikat.besorgen()
+const httpsServer = zert ? https.createServer(zert, behandeln) : null
+
+let tlsGemeldet = false
+
+function weiche (socket) {
+  socket.once('error', () => { try { socket.destroy() } catch { /* schon zu */ } })
+  socket.once('data', (stueck) => {
+    // Ein TLS-Handshake faengt mit 0x16 an. Jede HTTP-Anfrage mit einem
+    // Buchstaben.
+    const tls = stueck[0] === 0x16
+
+    if (tls && !httpsServer) {
+      if (!tlsGemeldet) {
+        tlsGemeldet = true
+        console.log('')
+        console.log('  !! Dein Browser hat HTTPS versucht, nicht HTTP, und')
+        console.log('     hier gibt es kein Zertifikat (openssl fehlt).')
+        console.log('     Deshalb siehst du ERR_SSL_PROTOCOL_ERROR.')
+        console.log('')
+        console.log('     Abhilfe: chrome://net-internals/#hsts oeffnen, unten')
+        console.log('     bei "Delete domain security policies" nacheinander')
+        console.log('     localhost und 127.0.0.1 eintragen und loeschen.')
+        console.log('')
+      }
+      socket.destroy()
+      return
+    }
+
+    socket.pause()
+    socket.unshift(stueck)
+    ;(tls ? httpsServer : httpServer).emit('connection', socket)
+    process.nextTick(() => socket.resume())
+  })
+}
+
+const server = net.createServer(weiche)
+// Zweiter Zuhoerer auf ::1: Chrome loest "localhost" bevorzugt nach IPv6 auf.
 // Beides bleibt auf dem Loopback -- nichts davon ist im Netz erreichbar.
-const serverV6 = http.createServer(behandeln)
+const serverV6 = net.createServer(weiche)
 
 function browserOeffnen (adresse) {
   if (process.env.COCKPIT_KEIN_BROWSER) return
@@ -266,7 +310,9 @@ function starten (port, versuche = 10) {
     serverV6.on('error', () => {})
     serverV6.listen(port, '::1')
 
-    const adresse = `http://localhost:${port}`
+    // Wenn ein Zertifikat da ist, ist https die Adresse, die in jeder
+    // Browsereinstellung funktioniert -- auch in einer, die http hochstuft.
+    const adresse = (httpsServer ? 'https' : 'http') + `://localhost:${port}`
     // Bewusst nur ASCII: das Windows-Konsolenfenster laeuft nicht auf UTF-8,
     // und ein Gedankenstrich wird dort zu Zeichensalat -- ausgerechnet in der
     // ersten Zeile, die der Nutzer ueberhaupt zu sehen bekommt.
@@ -274,19 +320,25 @@ function starten (port, versuche = 10) {
     console.log('  REISSBRETT - Cockpit fuer den Agenten-Loop')
     console.log('  ' + '-'.repeat(43))
     console.log(`  Offen unter   ${adresse}`)
-    console.log(`  oder          http://127.0.0.1:${port}`)
+    console.log(`  oder          ${httpsServer ? 'https' : 'http'}://127.0.0.1:${port}`)
     console.log(`  Projekte aus  ${WURZEL}`)
     console.log(`  Scaffold aus  ${SCAFFOLD}${fs.existsSync(path.join(SCAFFOLD, 'loop.sh')) ? '' : '   << FEHLT!'}`)
     console.log('')
     console.log('  Beenden mit Strg+C.')
     console.log('')
-    console.log('  Zeigt der Browser ERR_SSL_PROTOCOL_ERROR, dann erzwingt er')
-    console.log('  HTTPS. Das Cockpit spricht nur HTTP, weil es den Rechner')
-    console.log('  nie verlaesst. Abhilfe in Chrome:')
-    console.log('    Einstellungen > Datenschutz und Sicherheit > Sicherheit')
-    console.log('    > "Immer sichere Verbindungen verwenden" ausschalten,')
-    console.log('    oder unter chrome://net-internals/#hsts bei "Delete domain')
-    console.log('    security policies" localhost und 127.0.0.1 loeschen.')
+    if (httpsServer) {
+      console.log('  Der Port versteht HTTP und HTTPS gleichzeitig -- egal, was')
+      console.log('  dein Browser daraus macht, er kommt an.')
+      console.log('')
+      console.log('  Beim ersten Mal warnt Chrome vor dem eigenen Zertifikat:')
+      console.log('    "Erweitert" > "Weiter zu localhost (unsicher)".')
+      console.log('  Das Zertifikat gilt nur fuer localhost auf diesem Rechner.')
+    } else {
+      console.log('  Hinweis: openssl wurde nicht gefunden, deshalb nur HTTP.')
+      console.log('  Zeigt der Browser ERR_SSL_PROTOCOL_ERROR, erzwingt er HTTPS:')
+      console.log('    chrome://net-internals/#hsts oeffnen, unten bei "Delete')
+      console.log('    domain security policies" localhost und 127.0.0.1 loeschen.')
+    }
     console.log('')
     browserOeffnen(adresse)
   })
