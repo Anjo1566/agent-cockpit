@@ -464,13 +464,25 @@ async function hole (weg, opt) {
   return daten
 }
 
+// Ein Fehler im Skript darf nicht in eine tote Seite muenden. Ohne diesen
+// Melder sieht man nur ein Bild, das sich nicht mehr bewegt, und weiss nicht,
+// ob der Loop steht oder die Oberflaeche.
+window.addEventListener('error', (e) => {
+  melde('Fehler in der Oberflaeche: ' + (e.message || 'unbekannt') +
+        ' — die Anzeige kann jetzt falsch sein. Seite neu laden.', true)
+})
+window.addEventListener('unhandledrejection', (e) => {
+  melde('Fehler: ' + ((e.reason && e.reason.message) || e.reason || 'unbekannt'), true)
+})
+
 function melde (text, fehler) {
   const m = $('#melder')
   m.textContent = text
   m.className = 'melder' + (fehler ? ' fehler' : '')
   m.hidden = false
   clearTimeout(melde._weg)
-  melde._weg = setTimeout(() => { m.hidden = true }, 5200)
+  if (!fehler) melde._weg = setTimeout(() => { m.hidden = true }, 5200)
+  m.onclick = () => { m.hidden = true }
 }
 
 function verbinde () {

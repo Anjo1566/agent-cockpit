@@ -190,27 +190,88 @@ const server = http.createServer(async (anfrage, antwort) => {
   }
 })
 
-server.listen(PORT, '127.0.0.1', () => {
-  const adresse = `http://127.0.0.1:${PORT}`
-  console.log('')
-  console.log('  REISSBRETT — Cockpit fuer den Agenten-Loop')
-  console.log('  ' + '─'.repeat(44))
-  console.log(`  Offen unter   ${adresse}`)
-  console.log(`  Projekte aus  ${WURZEL}`)
-  console.log(`  Scaffold aus  ${SCAFFOLD}${fs.existsSync(path.join(SCAFFOLD, 'loop.sh')) ? '' : '   << fehlt!'}`)
-  console.log('')
-  console.log('  Beenden mit Strg+C.')
-  console.log('')
+function browserOeffnen (adresse) {
+  if (process.env.COCKPIT_KEIN_BROWSER) return
+  const [befehl, args] = process.platform === 'win32'
+    ? ['cmd', ['/c', 'start', '', adresse]]
+    : process.platform === 'darwin'
+      ? ['open', [adresse]]
+      : ['xdg-open', [adresse]]
+  execFile(befehl, args, () => { /* kein Browser ist kein Fehler */ })
+}
 
-  if (!process.env.COCKPIT_KEIN_BROWSER) {
-    const [befehl, args] = process.platform === 'win32'
-      ? ['cmd', ['/c', 'start', '', adresse]]
-      : process.platform === 'darwin'
-        ? ['open', [adresse]]
-        : ['xdg-open', [adresse]]
-    execFile(befehl, args, () => { /* kein Browser ist kein Fehler */ })
-  }
-})
+/** Läuft auf diesem Port schon ein Cockpit, oder etwas Fremdes? */
+function schonEinCockpit (port) {
+  return new Promise((fertig) => {
+    const anfrage = http.get(
+      { host: '127.0.0.1', port, path: '/api/zustand', timeout: 800 },
+      (antwort) => {
+        let roh = ''
+        antwort.on('data', s => { roh += s })
+        antwort.on('end', () => {
+          try { fertig(typeof JSON.parse(roh).laeuft === 'boolean') } catch { fertig(false) }
+        })
+      })
+    anfrage.on('error', () => fertig(false))
+    anfrage.on('timeout', () => { anfrage.destroy(); fertig(false) })
+  })
+}
+
+function starten (port, versuche = 10) {
+  server.removeAllListeners('error')
+
+  server.once('error', async (f) => {
+    if (f.code !== 'EADDRINUSE') {
+      console.error(`\n  Der Server konnte nicht starten: ${f.message}\n`)
+      process.exit(1)
+    }
+
+    // Der haeufigste Fall von allen: das Cockpit laeuft schon, in einem anderen
+    // Fenster oder von vorhin. Ohne diesen Zweig sieht man einen rohen
+    // Node-Stacktrace und keinen Hinweis, was zu tun waere.
+    if (await schonEinCockpit(port)) {
+      const adresse = `http://127.0.0.1:${port}`
+      console.log('')
+      console.log('  Das Cockpit laeuft bereits.')
+      console.log(`  Ich oeffne es: ${adresse}`)
+      console.log('')
+      console.log('  Willst du wirklich neu starten, schliess zuerst das andere')
+      console.log('  Fenster (Strg+C) und starte diese Datei erneut.')
+      console.log('')
+      browserOeffnen(adresse)
+      process.exit(0)
+    }
+
+    if (versuche > 0) {
+      console.log(`  Port ${port} ist belegt, ich nehme ${port + 1}.`)
+      starten(port + 1, versuche - 1)
+      return
+    }
+
+    console.error(`\n  Die Ports ${PORT} bis ${port} sind alle belegt.`)
+    console.error('  Setze COCKPIT_PORT auf einen freien Port.\n')
+    process.exit(1)
+  })
+
+  server.listen(port, '127.0.0.1', () => {
+    const adresse = `http://127.0.0.1:${port}`
+    // Bewusst nur ASCII: das Windows-Konsolenfenster laeuft nicht auf UTF-8,
+    // und ein Gedankenstrich wird dort zu Zeichensalat -- ausgerechnet in der
+    // ersten Zeile, die der Nutzer ueberhaupt zu sehen bekommt.
+    console.log('')
+    console.log('  REISSBRETT - Cockpit fuer den Agenten-Loop')
+    console.log('  ' + '-'.repeat(43))
+    console.log(`  Offen unter   ${adresse}`)
+    console.log(`  Projekte aus  ${WURZEL}`)
+    console.log(`  Scaffold aus  ${SCAFFOLD}${fs.existsSync(path.join(SCAFFOLD, 'loop.sh')) ? '' : '   << FEHLT!'}`)
+    console.log('')
+    console.log('  Beenden mit Strg+C.')
+    console.log('')
+    browserOeffnen(adresse)
+  })
+}
+
+starten(PORT)
 
 process.on('SIGINT', () => {
   console.log('\n  Cockpit beendet. Ein laufender Loop laeuft im Hintergrund weiter.')

@@ -8,7 +8,7 @@ ohne Terminal.
 
 ## Starten
 
-Doppelklick auf **`start.cmd`**. Der Browser geht von selbst auf.
+Doppelklick auf **`cockpit.cmd`**. Der Browser geht von selbst auf.
 
 Oder im Terminal:
 
@@ -64,7 +64,7 @@ Als Umgebungsvariablen, alle optional:
 
 | Variable | Standard | wofür |
 |---|---|---|
-| `COCKPIT_PORT` | `4173` | Port |
+| `COCKPIT_PORT` | `4173` | Port. Ist er belegt, nimmt das Cockpit den naechsten freien. Laeuft dort schon ein Cockpit, oeffnet es stattdessen jenes. |
 | `COCKPIT_WURZEL` | der Ordner über dem Cockpit | wo nach Projekten gesucht wird |
 | `COCKPIT_SCAFFOLD` | `../agent-loop` | woher der Loop beim Einrichten kopiert wird |
 | `COCKPIT_BASH` | automatisch gesucht | Pfad zur `bash.exe`, falls sie woanders liegt |
