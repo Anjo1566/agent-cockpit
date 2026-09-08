@@ -83,7 +83,8 @@ function datei (antwort, name) {
 function projektPfad (wert) {
   if (!wert || typeof wert !== 'string') throw new Error('Kein Projekt angegeben.')
   const p = path.resolve(wert)
-  if (!p.startsWith(path.resolve(WURZEL))) throw new Error('Dieses Projekt liegt ausserhalb der Wurzel.')
+  const relativ = path.relative(path.resolve(WURZEL), p)
+  if (relativ.startsWith('..') || path.isAbsolute(relativ)) throw new Error('Dieses Projekt liegt ausserhalb der Wurzel.')
   if (!projekte.istRepo(p)) throw new Error('Das ist kein Git-Repository.')
   return p
 }
