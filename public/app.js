@@ -387,6 +387,39 @@ function zeichneBand () {
     }
   }
 
+  // Die Note je Runde, als Treppe ueber demselben Massstab. Das ist die
+  // Zahl, an der der Lauf endet, und sie stand bisher nur als einzelner
+  // Wert im Schriftfeld -- ob sie steigt, faellt oder seit vier Runden
+  // steht, war nirgends zu sehen.
+  if (zustand.notenband.length) {
+    const yVon = (n) => 44 - (Math.max(0, Math.min(10, n)) / 10) * 36
+    if (zustand.zielnote != null) {
+      svg.appendChild(el('path', {
+        class: 'zielline', 'vector-effect': 'non-scaling-stroke',
+        d: `M${links} ${yVon(zustand.zielnote)} H${rechts}`
+      }))
+      svg.appendChild(el('text', { class: 'zielmarke', x: rechts, y: yVon(zustand.zielnote) - 4, 'text-anchor': 'end' },
+        [document.createTextNode('ZIEL ' + zustand.zielnote)]))
+    }
+    let d = ''
+    for (const { i, note } of zustand.notenband) {
+      if (note == null) continue
+      const xa = links + schritt * (i - 1)
+      const xb = links + schritt * i
+      d += (d ? ` L${xa} ${yVon(note)}` : `M${xa} ${yVon(note)}`) + ` H${xb}`
+    }
+    if (d) {
+      svg.appendChild(el('path', { class: 'notenlinie', 'vector-effect': 'non-scaling-stroke', d }))
+      const letzte = [...zustand.notenband].reverse().find(n => n.note != null)
+      if (letzte) {
+        svg.appendChild(el('text', {
+          class: 'notenzahl', x: links + schritt * (letzte.i - 0.5), y: yVon(letzte.note) - 5,
+          'text-anchor': 'middle'
+        }, [document.createTextNode(letzte.note.toFixed(1))]))
+      }
+    }
+  }
+
   if (zustand.laeuft && zustand.runde > 0) {
     const x = links + schritt * (zustand.runde - 0.5)
     const g = el('g')
@@ -506,6 +539,10 @@ function sperren (daten) {
 
 const stromliste = $('#stromliste')
 let letzteRundeImStrom = 0
+// Die Liste haelt hoechstens 220 Zeilen im DOM. Gezaehlt wird trotzdem
+// alles, was durchgelaufen ist -- sonst stuende im Kopf ab der 220. Zeile
+// fuer den Rest des Laufs dieselbe Zahl.
+let stromZaehler = 0
 
 function stromZeile (opt) {
   if (opt.runde && opt.runde !== letzteRundeImStrom) {
@@ -528,7 +565,8 @@ function stromZeile (opt) {
   stromliste.appendChild(z)
   while (stromliste.childElementCount > 220) stromliste.firstChild.remove()
   if (untenDran) stromliste.scrollTop = stromliste.scrollHeight
-  $('#stromzahl').textContent = String(stromliste.childElementCount)
+  stromZaehler += 1
+  $('#stromzahl').textContent = String(stromZaehler)
 }
 
 const escape_ = (s) => String(s == null ? '' : s)
@@ -572,6 +610,13 @@ function verbinde () {
     zustand.ohneStrom = true
     return
   }
+  // Laeuft in einem Projekt schon ein Lauf, den dieses Cockpit nicht selbst
+  // gestartet hat? Dann anhaengen, statt "BEREIT" zu zeigen. Der Server macht
+  // das beim Start auch von sich aus; hier noch einmal, weil die Seite auch
+  // spaeter neu geladen werden kann.
+  fetch('/api/anhaengen', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })
+    .catch(() => { /* ein fehlgeschlagener Versuch darf die Seite nicht aufhalten */ })
+
   const quelle = new EventSource('/api/strom')
   quelle.onopen = () => { zustand.verbunden = true; render() }
   quelle.onmessage = (n) => {
@@ -613,7 +658,7 @@ function verarbeite (e) {
         note: null, notenband: [], turns: 0, fragen: 0
       })
       zustand.projektName = e.projekt.split(/[\\/]/).pop()
-      stromliste.textContent = ''; letzteRundeImStrom = 0
+      stromliste.textContent = ''; letzteRundeImStrom = 0; stromZaehler = 0
       break
     case 'runde':
       Object.assign(zustand, {
@@ -775,12 +820,41 @@ async function blattProjekt () {
         ? '<span class="marke bereit">EINGERICHTET</span>'
         : '<span class="marke fehlt">NICHT EINGERICHTET</span>'
       const sauber = p.sauber ? '' : `<span class="marke schmutzig">${p.offeneDateien} OFFEN</span>`
+      // Der Schutzstand steht in der Zeile, weil er sonst nirgends steht. Ein
+      // Projekt mit veralteten Guards sieht von aussen aus wie eines mit
+      // neuen -- agent-cockpit lief so acht Runden.
+      const veraltet = p.eingerichtet && p.schutz != null && daten.schutzSoll != null &&
+                       p.schutz < daten.schutzSoll
+      const schutzmarke = !p.eingerichtet
+        ? ''
+        : veraltet
+          ? `<span class="marke fehlt" title="Der Schutzsatz in diesem Projekt ist aelter als der im Scaffold.">GUARDS ${p.schutz} &lt; ${daten.schutzSoll}</span>`
+          : `<span class="marke">GUARDS ${p.schutz ?? '?'}</span>`
       zeile.innerHTML =
         `<div><div class="pname">${escape_(p.name)}</div>` +
         `<div class="pmeta">${escape_(p.branch)}${p.remote ? ' · ' + escape_(p.remote.replace(/^https:\/\/github.com\//, '')) : ' · kein Remote'}</div></div>` +
-        sauber + marke
+        sauber + schutzmarke + marke
       zeile.onclick = async () => {
         gewaehlt = p.pfad
+        if (veraltet) {
+          if (confirm(`Der Schutzsatz in "${p.name}" ist Version ${p.schutz}, das Scaffold hat ${daten.schutzSoll}.\n\n` +
+                      'Jetzt nachziehen? Guards, Charta, Rundenprompt und loop.sh werden aus dem Scaffold ' +
+                      'erneuert; deine Konfiguration oben in loop.sh und TASKS.md, STATUS.md und QUESTIONS.md ' +
+                      'bleiben, wie sie sind.')) {
+            try {
+              const a = await hole('/api/aktualisieren', {
+                method: 'POST', headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ pfad: p.pfad })
+              })
+              const b = a.bericht || {}
+              melde(`${p.name}: Schutzsatz ${b.vonSchutz} -> ${b.aufSchutz}, ${(b.erneuert || []).length} Dateien erneuert` +
+                    (b.committet ? '.' : ' -- NICHT committet, siehe git status.'))
+              if ((b.warnungen || []).length) melde(b.warnungen[0], true)
+            } catch (f) { melde(f.message, true); return }
+            await blattProjekt()
+            return
+          }
+        }
         if (!p.eingerichtet) {
           if (!confirm(`Den Loop in "${p.name}" einrichten?\n\nKopiert Guards, Charta und loop.sh hinein. Vorhandene TASKS.md, STATUS.md und QUESTIONS.md bleiben unangetastet.`)) return
           let antwort
@@ -924,6 +998,87 @@ async function blattEinstellungen () {
   })
 }
 
+async function blattStand () {
+  // STATUS.md wurde von /api/projekt schon immer mitgeliefert und nirgends
+  // angezeigt. Dabei steht genau dort, was der Chef in der letzten Runde getan
+  // hat, wie er bewertet wurde, wie oft die aktuelle Aufgabe durchs Review
+  // gefallen ist und was als naechstes drankommt -- der einzige Ort, an dem
+  // der Lauf sich selbst erklaert. (Befund B2-3 aus dem Review.)
+  if (!zustand.projekt) return melde('Erst ein Projekt wählen.', true)
+  zeigeBlatt('STAND', async (k) => {
+    let daten
+    try { daten = await hole('/api/projekt?pfad=' + encodeURIComponent(zustand.projekt)) } catch (f) { k.innerHTML = `<div class="hinweis warn">${escape_(f.message)}</div>`; return }
+    const text = String(daten.status || '').trim()
+    if (!text) {
+      k.innerHTML = '<div class="hinweis">Noch kein STATUS.md — der erste Rundenabschluss schreibt es.</div>'
+      return
+    }
+    k.innerHTML = '<div class="hinweis">Aus <code>STATUS.md</code>. Der Chef schreibt die Datei am Ende jeder Runde neu.</div>'
+    const block = document.createElement('pre')
+    block.className = 'standtext'
+    block.textContent = text
+    k.appendChild(block)
+  })
+}
+
+async function blattRunden () {
+  // Der Ereignisstrom war nur live und nur fuer die laufende Runde zu sehen.
+  // Nach dem Lauf lag die Begruendung jeder Entscheidung im Dateisystem und
+  // sonst nirgends. (Befund B2-4.)
+  if (!zustand.projekt) return melde('Erst ein Projekt wählen.', true)
+  zeigeBlatt('RUNDEN', async (k) => {
+    let daten
+    try { daten = await hole('/api/runden?pfad=' + encodeURIComponent(zustand.projekt)) } catch (f) { k.innerHTML = `<div class="hinweis warn">${escape_(f.message)}</div>`; return }
+    const runden = daten.runden || []
+    if (!runden.length) {
+      k.innerHTML = '<div class="hinweis">Noch keine abgeschlossene Runde.</div>'
+      return
+    }
+    k.innerHTML = '<div class="hinweis">Eine Zeile je Runde. Anklicken zeigt die Werkzeugaufrufe und die Guard-Blockaden dieser Runde.</div>'
+    for (const r of runden) {
+      const zeile = document.createElement('div')
+      zeile.className = 'rundenzeile' + (r.fehler ? ' fehlerhaft' : '')
+      const sek = (r.dauerMs / 1000).toFixed(0)
+      zeile.innerHTML =
+        `<div><div class="pname">Runde ${String(r.nr).padStart(2, '0')}</div>` +
+        `<div class="pmeta">${sek} s · ${r.turns} Turns · ${r.kostenUsd.toFixed(2)} USD` +
+        `${r.fehler ? ' · <span class="warnwort">abgebrochen: ' + escape_(r.art) + '</span>' : ''}</div></div>` +
+        (r.stromDa ? '<span class="marke bereit">STROM DA</span>' : '<span class="marke">STROM WEG</span>')
+      zeile.onclick = async () => {
+        let d
+        try {
+          d = await hole(`/api/runde?pfad=${encodeURIComponent(zustand.projekt)}&nr=${r.nr}`)
+        } catch (f) { melde(f.message, true); return }
+        zeigeBlatt(`RUNDE ${String(r.nr).padStart(2, '0')}`, (kk) => {
+          if (!d.stromDa) {
+            kk.innerHTML = '<div class="hinweis">Der Ereignisstrom dieser Runde ist gelöscht — der Lauf behält nur die letzten beiden, damit die Platte nicht vollläuft. Das Ergebnis steht unten.</div>'
+          } else if (d.abgeschnitten) {
+            kk.innerHTML = `<div class="hinweis">Die letzten ${d.ereignisse.length} von ${d.ereignisse.length + d.abgeschnitten} Ereignissen.</div>`
+          } else {
+            kk.innerHTML = `<div class="hinweis">${d.ereignisse.length} Ereignisse.</div>`
+          }
+          for (const e of d.ereignisse) {
+            const z = document.createElement('div')
+            z.className = 'zeile' + (e.art === 'guard' ? ' geblockt' : '')
+            z.innerHTML =
+              `<div class="balken"></div><div class="zeit"></div>` +
+              `<div class="kuerzel">${e.art === 'guard' ? 'GRD' : ''}</div>` +
+              `<div class="inhalt"><span class="werkzeugname">${escape_(e.art === 'guard' ? 'GESPERRT' : e.name)}</span> ${escape_(e.text || e.detail)}</div>`
+            kk.appendChild(z)
+          }
+          if (d.ergebnis) {
+            const roh = document.createElement('pre')
+            roh.className = 'standtext'
+            roh.textContent = JSON.stringify(d.ergebnis, null, 2)
+            kk.appendChild(roh)
+          }
+        })
+      }
+      k.appendChild(zeile)
+    }
+  })
+}
+
 async function blattFragen () {
   if (!zustand.projekt) return melde('Erst ein Projekt waehlen.', true)
   zeigeBlatt('FRAGEN', async (k) => {
@@ -1038,10 +1193,14 @@ $('#startknopf').onclick = async () => {
   const runden = Number(prompt('Wie viele Runden?\n\nEine Runde dauert etwa vier Minuten. Fang mit drei an.', '3'))
   if (!runden || runden < 1) return
   try {
-    await hole('/api/start', {
+    const antwort = await hole('/api/start', {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ pfad: zustand.projekt, runden })
     })
+    if (antwort.angepasst) {
+      melde(`Rundenzahl angepasst: ${antwort.angepasst.angefordert} war ungueltig oder ausserhalb 1-200, ` +
+        `verwendet wurden ${antwort.angepasst.verwendet}.`)
+    }
   } catch (f) { melde(f.message, true) }
 }
 
@@ -1049,6 +1208,8 @@ for (const knopf of document.querySelectorAll('[data-blatt]')) {
   knopf.onclick = () => ({
     projekt: blattProjekt,
     aufgaben: blattAufgaben,
+    stand: blattStand,
+    runden: blattRunden,
     fragen: blattFragen,
     einstellungen: blattEinstellungen
   })[knopf.dataset.blatt]()
@@ -1112,10 +1273,25 @@ function probelauf (szene) {
     [13400, { typ: 'aktion', rolle: 'chef', name: 'Write', detail: 'STATUS.md', klasse: 'schreibt' }],
     [14000, { typ: 'kosten', usd: 0.58, turns: 16 }],
     [14200, { typ: 'tests', gruen: true, anzahl: 27 }],
+    [14600, { typ: 'note', i: 1, note: 6.4, ziel: 8.5, begruendung: 'Der Installationspfad meldet Erfolg, auch wenn der Commit fehlschlug.' }],
     [15000, { typ: 'runde', i: 2, max: 4, modell: 'sonnet', aufwand: 'high' }],
     [15400, { typ: 'rolle', rolle: 'chef', auftrag: 'wählt die nächste Aufgabe' }],
     [16200, { typ: 'rolle', rolle: 'coder', auftrag: 'Add stats(text) returning open/done/total' }],
-    [17000, { typ: 'aktion', rolle: 'coder', name: 'Edit', detail: 'src/tasklist.js', klasse: 'schreibt' }]
+    [17000, { typ: 'aktion', rolle: 'coder', name: 'Edit', detail: 'src/tasklist.js', klasse: 'schreibt' }],
+    [18200, { typ: 'aktion', rolle: 'coder', name: 'Bash', detail: 'node --test', klasse: 'bash' }],
+    [19000, { typ: 'rolle', rolle: 'reviewer', auftrag: 'prüft stats() gegen die Aufgabe' }],
+    [19800, { typ: 'rolle', rolle: 'chef', auftrag: 'trägt den Befund ein und committet' }],
+    [20400, { typ: 'kosten', usd: 1.11, turns: 29 }],
+    [20600, { typ: 'tests', gruen: true, anzahl: 31 }],
+    // Die Note je Runde ist der einzige Verlauf, an dem man sieht, ob der Lauf
+    // irgendwohin kommt. Sie faellt hier zwischendurch -- das ist der
+    // haeufigste Fall und der, den man erkennen koennen muss.
+    [21000, { typ: 'note', i: 2, note: 7.3, ziel: 8.5, begruendung: 'Der eol-Fehler ist weg, die Testabdeckung von app.js bleibt offen.' }],
+    [21800, { typ: 'runde', i: 3, max: 4, modell: 'sonnet', aufwand: 'high' }],
+    [22200, { typ: 'rolle', rolle: 'coder', auftrag: 'Break installiere() into named steps' }],
+    [23400, { typ: 'kosten', usd: 1.64, turns: 41 }],
+    [23600, { typ: 'tests', gruen: true, anzahl: 33 }],
+    [24000, { typ: 'note', i: 3, note: 6.8, ziel: 8.5, begruendung: 'Ein neuer Befund wiegt schwerer als die geschlossenen.' }]
   ]
   if (szene === 'guard') {
     // Direkt in den Sperrmoment und dort stehen bleiben.

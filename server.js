@@ -21,7 +21,9 @@ const { execFile } = require('node:child_process')
 const projekte = require('./lib/projekte.js')
 const konfig = require('./lib/konfig.js')
 const zertifikat = require('./lib/zertifikat.js')
+const herkunft = require('./lib/herkunft.js')
 const { Lauf } = require('./lib/lauf.js')
+const { koerperLesen, projektPfad } = require('./lib/anfrage.js')
 
 const PORT = Number(process.env.COCKPIT_PORT || 4173)
 const WURZEL = process.env.COCKPIT_WURZEL || path.resolve(__dirname, '..')
@@ -49,20 +51,6 @@ function json (antwort, code, koerper) {
   antwort.end(text)
 }
 
-function koerperLesen (anfrage) {
-  return new Promise((fertig, fehler) => {
-    let roh = ''
-    anfrage.on('data', s => {
-      roh += s
-      if (roh.length > 1e6) { anfrage.destroy(); fehler(new Error('Zu gross.')) }
-    })
-    anfrage.on('end', () => {
-      try { fertig(roh ? JSON.parse(roh) : {}) } catch (e) { fehler(new Error('Kein gueltiges JSON.')) }
-    })
-    anfrage.on('error', fehler)
-  })
-}
-
 const TYPEN = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml' }
 
 function datei (antwort, name) {
@@ -79,15 +67,6 @@ function datei (antwort, name) {
   })
 }
 
-/** Ein Projektpfad aus der Anfrage, gegen die Wurzel geprueft. */
-function projektPfad (wert) {
-  if (!wert || typeof wert !== 'string') throw new Error('Kein Projekt angegeben.')
-  const p = path.resolve(wert)
-  if (!p.startsWith(path.resolve(WURZEL))) throw new Error('Dieses Projekt liegt ausserhalb der Wurzel.')
-  if (!projekte.istRepo(p)) throw new Error('Das ist kein Git-Repository.')
-  return p
-}
-
 function lies (projekt, rel, ersatz = '') {
   try { return fs.readFileSync(path.join(projekt, rel), 'utf8') } catch { return ersatz }
 }
@@ -99,6 +78,15 @@ const behandeln = async (anfrage, antwort) => {
   const weg = url.pathname
 
   try {
+    // Alles, was den Zustand aendert, muss von der eigenen Seite kommen.
+    // "Hoert nur auf 127.0.0.1" ist dagegen kein Schutz: eine fremde Seite im
+    // selben Browser darf dorthin schicken, und mit Content-Type text/plain
+    // entfaellt sogar die Preflight-Anfrage. Siehe lib/herkunft.js.
+    if (anfrage.method !== 'GET' && anfrage.method !== 'HEAD') {
+      const pruefung = herkunft.erlaubt(anfrage)
+      if (!pruefung.ok) return json(antwort, 403, { fehler: pruefung.grund })
+    }
+
     if (weg === '/' || weg === '/index.html') return datei(antwort, 'index.html')
     if (weg.startsWith('/public/')) return datei(antwort, weg.slice(8))
     if (/^\/[\w.-]+\.(js|css|svg)$/.test(weg)) return datei(antwort, weg.slice(1))
@@ -128,12 +116,15 @@ const behandeln = async (anfrage, antwort) => {
         wurzel: WURZEL,
         scaffold: SCAFFOLD,
         scaffoldDa: fs.existsSync(path.join(SCAFFOLD, 'loop.sh')),
+        // Der Schutzstand des Scaffolds. Daran misst die Seite, welche
+        // Projekte hinterherhinken.
+        schutzSoll: projekte.schutzVersion(SCAFFOLD),
         projekte: projekte.liste(WURZEL)
       })
     }
 
     if (weg === '/api/projekt' && anfrage.method === 'GET') {
-      const p = projektPfad(url.searchParams.get('pfad'))
+      const p = projektPfad(url.searchParams.get('pfad'), WURZEL)
       const stand = projekte.installationsStand(p)
       return json(antwort, 200, {
         ...projekte.details(p),
@@ -147,10 +138,17 @@ const behandeln = async (anfrage, antwort) => {
 
     if (weg === '/api/installieren' && anfrage.method === 'POST') {
       const k = await koerperLesen(anfrage)
-      const p = projektPfad(k.pfad)
+      const p = projektPfad(k.pfad, WURZEL)
       // Der Testbefehl und der Zielbranch werden in installiere() gesetzt --
       // dort ist auch bekannt, ob geraten wurde oder nicht.
       const bericht = projekte.installiere(p, SCAFFOLD)
+      return json(antwort, 200, { bericht, projekt: projekte.details(p) })
+    }
+
+    if (weg === '/api/aktualisieren' && anfrage.method === 'POST') {
+      const k = await koerperLesen(anfrage)
+      const p = projektPfad(k.pfad, WURZEL)
+      const bericht = projekte.aktualisiere(p, SCAFFOLD)
       return json(antwort, 200, { bericht, projekt: projekte.details(p) })
     }
 
@@ -161,7 +159,7 @@ const behandeln = async (anfrage, antwort) => {
 
     if (weg === '/api/tasks' && anfrage.method === 'POST') {
       const k = await koerperLesen(anfrage)
-      const p = projektPfad(k.pfad)
+      const p = projektPfad(k.pfad, WURZEL)
       if (typeof k.text !== 'string') throw new Error('Kein Text.')
       fs.writeFileSync(path.join(p, 'TASKS.md'), k.text.replace(/\r\n/g, '\n'), 'utf8')
       // Sofort committen: sonst blockiert der eigene Backlog-Eintrag den Start.
@@ -171,18 +169,33 @@ const behandeln = async (anfrage, antwort) => {
 
     if (weg === '/api/konfig' && anfrage.method === 'POST') {
       const k = await koerperLesen(anfrage)
-      const p = projektPfad(k.pfad)
+      const p = projektPfad(k.pfad, WURZEL)
       const stand = konfig.schreib(p, k.werte || {})
       // loop.sh ist versioniert -- ohne Commit bleibt das Verzeichnis schmutzig.
       const gesichert = projekte.sichere(p, ['loop.sh'], 'Update the loop configuration')
       return json(antwort, 200, { ...stand, gesichert })
     }
 
+    // Ein Lauf, den dieses Cockpit nicht gestartet hat, aber der noch laeuft.
+    // Der Aufruf ist billig und idempotent; die Seite macht ihn beim Laden.
+    if (weg === '/api/anhaengen' && anfrage.method === 'POST') {
+      const zustand = lauf.wiederaufnehmen(projekte.liste(WURZEL).map(p => p.pfad))
+      return json(antwort, 200, { angehaengt: zustand !== null, zustand: lauf.zustand })
+    }
+
     if (weg === '/api/start' && anfrage.method === 'POST') {
       const k = await koerperLesen(anfrage)
-      const p = projektPfad(k.pfad)
+      const p = projektPfad(k.pfad, WURZEL)
       const runden = Math.max(1, Math.min(200, Number(k.runden) || 3))
-      return json(antwort, 200, lauf.starten(p, runden))
+      // Ungueltige oder ausserhalb [1, 200] liegende Werte wurden bisher
+      // stillschweigend ersetzt/geklemmt -- ohne Rueckmeldung merkte der
+      // Aufrufer nie, dass sein Wunschwert ignoriert wurde.
+      // Fehlt `runden` ganz, greift nur der dokumentierte Default (3) --
+      // das ist kein "Anpassen" und darf `angepasst` nicht auslösen.
+      const angepasst = k.runden !== undefined && Number(k.runden) !== runden
+        ? { angefordert: k.runden, verwendet: runden }
+        : null
+      return json(antwort, 200, { ...lauf.starten(p, runden), angepasst })
     }
 
     if (weg === '/api/stop' && anfrage.method === 'POST') {
@@ -192,6 +205,21 @@ const behandeln = async (anfrage, antwort) => {
 
     if (weg === '/api/zustand' && anfrage.method === 'GET') {
       return json(antwort, 200, lauf.zustand)
+    }
+
+    // Eine abgeschlossene Runde nachlesen. Bisher gab es den Ereignisstrom nur
+    // live und nur fuer die laufende Runde: war der Lauf vorbei, lag die
+    // Begruendung jeder Entscheidung im Dateisystem und sonst nirgends.
+    if (weg === '/api/runden' && anfrage.method === 'GET') {
+      const p = projektPfad(url.searchParams.get('pfad'), WURZEL)
+      return json(antwort, 200, { runden: projekte.rundenListe(p) })
+    }
+
+    if (weg === '/api/runde' && anfrage.method === 'GET') {
+      const p = projektPfad(url.searchParams.get('pfad'), WURZEL)
+      const nr = Number(url.searchParams.get('nr'))
+      if (!Number.isInteger(nr) || nr < 1) throw new Error('Rundennummer fehlt oder ist keine Zahl.')
+      return json(antwort, 200, projekte.rundeLesen(p, nr))
     }
 
     antwort.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' })
@@ -348,13 +376,58 @@ function starten (port, versuche = 10) {
       console.log('    domain security policies" localhost und 127.0.0.1 loeschen.')
     }
     console.log('')
+
+    // Laeuft in einem der Projekte schon ein Lauf? Dann sofort anhaengen,
+    // statt "BEREIT" zu zeigen, waehrend nebenan eine Runde arbeitet.
+    try {
+      const angehaengt = lauf.wiederaufnehmen(projekte.liste(WURZEL).map(p => p.pfad))
+      if (angehaengt) {
+        console.log(`  An einen laufenden Lauf angehaengt: ${angehaengt.projektName} ` +
+                    `(Prozess ${angehaengt.fremdePid}, Runde ${angehaengt.runde || '?'}).`)
+        console.log('')
+      }
+    } catch (f) {
+      console.log('  Hinweis: das Anhaengen an einen laufenden Lauf schlug fehl: ' + f.message)
+    }
+
     browserOeffnen(adresse)
   })
 }
 
-starten(PORT)
+// Nur starten, wenn diese Datei das Programm IST. Wird sie eingebunden -- von
+// einem Test --, soll sie nichts von selbst tun: kein Port, kein Banner, kein
+// Browserfenster.
+//
+// Das ist der Grund, warum der schwerste Befund dieses Repositorys so lange
+// unbemerkt blieb: die Routen waren nur von Hand pruefbar, also hat sie
+// niemand geprueft. `hoeren()` nimmt einen ephemeren Port und liefert ihn
+// zurueck, damit ein Test den echten Server ansprechen kann statt einer
+// Nachbildung, die dieselbe Luecke haette.
+function hoeren () {
+  return new Promise((fertig, fehler) => {
+    server.removeAllListeners('error')
+    server.once('error', fehler)
+    server.listen(0, '127.0.0.1', () => fertig(server.address().port))
+  })
+}
 
-process.on('SIGINT', () => {
-  console.log('\n  Cockpit beendet. Ein laufender Loop laeuft im Hintergrund weiter.')
-  process.exit(0)
-})
+function schliessen () {
+  for (const s of [server, serverV6, httpsServer]) {
+    try { if (s && s.close) s.close() } catch { /* schon zu */ }
+  }
+  for (const antwort of verbunden) {
+    try { antwort.end() } catch { /* schon zu */ }
+  }
+  verbunden.clear()
+}
+
+if (require.main === module) {
+  starten(PORT)
+
+  process.on('SIGINT', () => {
+    console.log('\n  Cockpit beendet. Ein laufender Loop laeuft im Hintergrund weiter.')
+    process.exit(0)
+  })
+}
+
+module.exports = { hoeren, schliessen, behandeln }
