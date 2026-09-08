@@ -18,7 +18,6 @@ with its own time limit (`timeout 20 npm start`). guard-bash.sh blocks the
 kill commands; a blocked command is the safeguard working, not a defect.
 
 - [ ] guard-bash.sh: the irreversibility rule matches `mkfs` only as a whole word, so `mkfs.ext4 /dev/sda` (and every other `mkfs.<fs>` spelling, which is how the command is actually used) walks past it. Pre-existing, found while closing the self-kill hole. Widen the pattern to `mkfs(\.[a-z0-9]+)?` and cover both spellings in test/selbstschutz.test.js. BLOCKED: `.claude/settings.json` denies `Edit(./.agents/hooks/**)` to every agent, including this loop, and denies editing settings.json itself too — no agent can lift the block. See QUESTIONS.md. Needs a human to apply this one directly.
-- [ ] /api/start silently substitutes or clamps an invalid `runden` value (server.js:184, `Math.max(1, Math.min(200, Number(k.runden) || 3))`) with no feedback to the caller that their input was ignored or adjusted. Tell the user when this happens.
 - [ ] Show the usage in the dashboard: tokens by model with the run total, next to the cost that is already there. It replaces nothing that is currently displayed.
 - [ ] Draw the grade per round as a step chart from zustand.notenband, with the target grade as a horizontal reference line. This is the chart that says whether the run is getting anywhere.
 - [ ] Draw the cost per round as bars, with the run total on the axis.

@@ -1038,10 +1038,14 @@ $('#startknopf').onclick = async () => {
   const runden = Number(prompt('Wie viele Runden?\n\nEine Runde dauert etwa vier Minuten. Fang mit drei an.', '3'))
   if (!runden || runden < 1) return
   try {
-    await hole('/api/start', {
+    const antwort = await hole('/api/start', {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ pfad: zustand.projekt, runden })
     })
+    if (antwort.angepasst) {
+      melde(`Rundenzahl angepasst: ${antwort.angepasst.angefordert} war ungueltig oder ausserhalb 1-200, ` +
+        `verwendet wurden ${antwort.angepasst.verwendet}.`)
+    }
   } catch (f) { melde(f.message, true) }
 }
 

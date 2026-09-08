@@ -183,7 +183,11 @@ const behandeln = async (anfrage, antwort) => {
       const k = await koerperLesen(anfrage)
       const p = projektPfad(k.pfad)
       const runden = Math.max(1, Math.min(200, Number(k.runden) || 3))
-      return json(antwort, 200, lauf.starten(p, runden))
+      // Ungueltige oder ausserhalb [1, 200] liegende Werte wurden bisher
+      // stillschweigend ersetzt/geklemmt -- ohne Rueckmeldung merkte der
+      // Aufrufer nie, dass sein Wunschwert ignoriert wurde.
+      const angepasst = Number(k.runden) !== runden ? { angefordert: k.runden, verwendet: runden } : null
+      return json(antwort, 200, { ...lauf.starten(p, runden), angepasst })
     }
 
     if (weg === '/api/stop' && anfrage.method === 'POST') {
