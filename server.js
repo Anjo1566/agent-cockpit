@@ -83,7 +83,21 @@ function datei (antwort, name) {
 function projektPfad (wert) {
   if (!wert || typeof wert !== 'string') throw new Error('Kein Projekt angegeben.')
   const p = path.resolve(wert)
-  const relativ = path.relative(path.resolve(WURZEL), p)
+  // Literaler Vergleich reicht nicht: liegt innerhalb von WURZEL ein Symlink
+  // oder eine Junction, die nach aussen zeigt, faengt path.relative das nicht
+  // ab -- der String faengt ja mit WURZEL an, obwohl der tatsaechliche
+  // Zielort ausserhalb liegt. Deshalb hier auf den echten (aufgeloesten) Pfad
+  // pruefen. realpathSync wirft bei nicht existierenden Pfaden; das faengt
+  // istRepo unten ohnehin mit derselben Fehlermeldung ab, also wird das hier
+  // als "kein Repo" statt als Absturz behandelt.
+  let echterPfad
+  try {
+    echterPfad = fs.realpathSync(p)
+  } catch {
+    throw new Error('Das ist kein Git-Repository.')
+  }
+  const echteWurzel = fs.realpathSync(path.resolve(WURZEL))
+  const relativ = path.relative(echteWurzel, echterPfad)
   if (relativ.startsWith('..') || path.isAbsolute(relativ)) throw new Error('Dieses Projekt liegt ausserhalb der Wurzel.')
   if (!projekte.istRepo(p)) throw new Error('Das ist kein Git-Repository.')
   return p
