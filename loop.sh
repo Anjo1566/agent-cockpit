@@ -4,9 +4,9 @@ set -euo pipefail
 # --- Vom Umsetzer auszufüllen -------------------------------------------
 TESTBEFEHL="npm test"  # muss bei Fehlschlag != 0 liefern
 TESTZAEHLER="./.agents/hooks/count-tests.sh"  # gibt die Anzahl Tests als Zahl aus
-MAX_TURNS=200  # harter Deckel pro Runde
+MAX_TURNS=60  # harter Deckel pro Runde
 MAX_OPUS_RUNDEN=5  # so viele Eskalationsrunden auf Opus pro Lauf
-MAX_BUDGET_USD=15  # dritte Notbremse pro Runde, Listenpreis-Schätzung
+MAX_BUDGET_USD=4  # dritte Notbremse pro Runde, Listenpreis-Schätzung
 MAX_LEERRUNDEN=2  # so viele Runden ohne Codeänderung, dann Abbruch
 BASIS_BRANCH="main"  # Zielbranch des Pull Requests
 ZIELNOTE=8.5  # ab dieser Gesamtnote ist der Auftrag erledigt

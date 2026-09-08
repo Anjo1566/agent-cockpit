@@ -116,6 +116,9 @@ const behandeln = async (anfrage, antwort) => {
         wurzel: WURZEL,
         scaffold: SCAFFOLD,
         scaffoldDa: fs.existsSync(path.join(SCAFFOLD, 'loop.sh')),
+        // Der Schutzstand des Scaffolds. Daran misst die Seite, welche
+        // Projekte hinterherhinken.
+        schutzSoll: projekte.schutzVersion(SCAFFOLD),
         projekte: projekte.liste(WURZEL)
       })
     }
@@ -139,6 +142,13 @@ const behandeln = async (anfrage, antwort) => {
       // Der Testbefehl und der Zielbranch werden in installiere() gesetzt --
       // dort ist auch bekannt, ob geraten wurde oder nicht.
       const bericht = projekte.installiere(p, SCAFFOLD)
+      return json(antwort, 200, { bericht, projekt: projekte.details(p) })
+    }
+
+    if (weg === '/api/aktualisieren' && anfrage.method === 'POST') {
+      const k = await koerperLesen(anfrage)
+      const p = projektPfad(k.pfad, WURZEL)
+      const bericht = projekte.aktualisiere(p, SCAFFOLD)
       return json(antwort, 200, { bericht, projekt: projekte.details(p) })
     }
 
@@ -166,6 +176,13 @@ const behandeln = async (anfrage, antwort) => {
       return json(antwort, 200, { ...stand, gesichert })
     }
 
+    // Ein Lauf, den dieses Cockpit nicht gestartet hat, aber der noch laeuft.
+    // Der Aufruf ist billig und idempotent; die Seite macht ihn beim Laden.
+    if (weg === '/api/anhaengen' && anfrage.method === 'POST') {
+      const zustand = lauf.wiederaufnehmen(projekte.liste(WURZEL).map(p => p.pfad))
+      return json(antwort, 200, { angehaengt: zustand !== null, zustand: lauf.zustand })
+    }
+
     if (weg === '/api/start' && anfrage.method === 'POST') {
       const k = await koerperLesen(anfrage)
       const p = projektPfad(k.pfad, WURZEL)
@@ -188,6 +205,21 @@ const behandeln = async (anfrage, antwort) => {
 
     if (weg === '/api/zustand' && anfrage.method === 'GET') {
       return json(antwort, 200, lauf.zustand)
+    }
+
+    // Eine abgeschlossene Runde nachlesen. Bisher gab es den Ereignisstrom nur
+    // live und nur fuer die laufende Runde: war der Lauf vorbei, lag die
+    // Begruendung jeder Entscheidung im Dateisystem und sonst nirgends.
+    if (weg === '/api/runden' && anfrage.method === 'GET') {
+      const p = projektPfad(url.searchParams.get('pfad'), WURZEL)
+      return json(antwort, 200, { runden: projekte.rundenListe(p) })
+    }
+
+    if (weg === '/api/runde' && anfrage.method === 'GET') {
+      const p = projektPfad(url.searchParams.get('pfad'), WURZEL)
+      const nr = Number(url.searchParams.get('nr'))
+      if (!Number.isInteger(nr) || nr < 1) throw new Error('Rundennummer fehlt oder ist keine Zahl.')
+      return json(antwort, 200, projekte.rundeLesen(p, nr))
     }
 
     antwort.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' })
@@ -344,6 +376,20 @@ function starten (port, versuche = 10) {
       console.log('    domain security policies" localhost und 127.0.0.1 loeschen.')
     }
     console.log('')
+
+    // Laeuft in einem der Projekte schon ein Lauf? Dann sofort anhaengen,
+    // statt "BEREIT" zu zeigen, waehrend nebenan eine Runde arbeitet.
+    try {
+      const angehaengt = lauf.wiederaufnehmen(projekte.liste(WURZEL).map(p => p.pfad))
+      if (angehaengt) {
+        console.log(`  An einen laufenden Lauf angehaengt: ${angehaengt.projektName} ` +
+                    `(Prozess ${angehaengt.fremdePid}, Runde ${angehaengt.runde || '?'}).`)
+        console.log('')
+      }
+    } catch (f) {
+      console.log('  Hinweis: das Anhaengen an einen laufenden Lauf schlug fehl: ' + f.message)
+    }
+
     browserOeffnen(adresse)
   })
 }

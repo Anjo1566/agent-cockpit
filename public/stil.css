@@ -25,8 +25,8 @@
 
   --text-hi:  #E6EDF5;
   --text-mid: #9AA9BC;
-  --text-low: #5E6C7E;
-  --text-ghost: #3A4653;
+  --text-low: #8494A8;    /* 5,6:1 auf --ink-020, Beschriftungen und Zeiten */
+  --text-ghost: #6B7A8C;  /* 4,6:1 auf --ink-010, ruhende Bauteile */
 
   /* Drei kalte Tuschen, in der Helligkeit klar gestaffelt, damit sie auch bei
    * Farbsehschwäche unterscheidbar bleiben. Coder ist bewusst NICHT papierweiss:
@@ -151,8 +151,8 @@ body {
 }
 #riss { width: 100%; height: 100%; display: block; }
 
-.rasterflaeche { opacity: 0; animation: rasterAn 400ms linear 60ms forwards; }
-@keyframes rasterAn { to { opacity: 1 } }
+.rasterflaeche { animation: rasterAn 400ms linear 60ms; }
+@keyframes rasterAn { from { opacity: 0 } to { opacity: 1 } }
 
 .rahmenlinie {
   fill: none; stroke: var(--line-hair); stroke-width: 1;
@@ -287,16 +287,16 @@ body {
   align-items: baseline; padding: 3px 24px 3px 0; min-height: 26px;
 }
 .zeile .balken { background: var(--rolle, var(--line-idle)); opacity: .35; align-self: stretch;
-  transform: scaleY(0); transform-origin: top; animation: balkenZieh 120ms var(--ease-snap) forwards; }
-@keyframes balkenZieh { to { transform: scaleY(1) } }
+  transform-origin: top; animation: balkenZieh 120ms var(--ease-snap); }
+@keyframes balkenZieh { from { transform: scaleY(0) } to { transform: scaleY(1) } }
 .zeile .zeit { font-family: var(--font-mono); font-size: 11px; color: var(--text-low); }
 .zeile .kuerzel { font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: .10em; color: var(--rolle, var(--text-low)); }
 .zeile .inhalt {
   font-family: var(--font-mono); font-size: 11.5px; line-height: 1.5; color: var(--text-mid);
   word-break: break-word;
-  clip-path: inset(0 100% 0 0); animation: aufdecken 220ms var(--ease-draw) forwards;
+  animation: aufdecken 220ms var(--ease-draw);
 }
-@keyframes aufdecken { to { clip-path: inset(0 0 0 0) } }
+@keyframes aufdecken { from { clip-path: inset(0 100% 0 0) } to { clip-path: inset(0 0 0 0) } }
 .zeile .werkzeugname { color: var(--text-low); letter-spacing: .12em; font-size: 10px; }
 .zeile.geblockt .inhalt { color: var(--rot); }
 .zeile.geblockt .balken { background: var(--rot); opacity: 1; width: 2px; }
@@ -320,6 +320,17 @@ body {
 @keyframes achse { to { background-position-y: -64px } }
 
 /* -------------------------------------------------------------- Rundenband */
+
+/* Notenband: die Treppe der Gesamtnoten und die Ziellinie, ueber demselben
+ * Massstab wie die Rundenstempel. Nicht-skalierende Striche, weil das Band
+ * mit preserveAspectRatio="none" in die Breite gezogen wird. */
+#band .notenlinie { fill: none; stroke: var(--role-chef); stroke-width: 1.5px; }
+#band .zielline { fill: none; stroke: var(--akzent); stroke-width: 1px; stroke-dasharray: 3 4; opacity: .55; }
+#band .zielmarke, #band .notenzahl {
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: .10em;
+}
+#band .zielmarke { fill: var(--akzent); opacity: .8 }
+#band .notenzahl { fill: var(--role-chef) }
 
 .rundenband {
   grid-column: 1; grid-row: 3;
@@ -361,6 +372,10 @@ body {
   font-family: var(--font-mono); font-size: 15px; letter-spacing: .01em; color: var(--text-hi);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+/* Modell und Aufwand sind zusammen laenger als jede andere Zelle. Statt sie
+ * abzuschneiden, bekommen sie eine eigene, kleinere Laufweite -- die Zelle
+ * ist die einzige, die zwei Werte traegt. */
+#wModell { font-size: 12.5px; letter-spacing: 0; }
 #zTests.gruen .wert { color: var(--gruen); }
 #zTests.gruen { box-shadow: inset 0 -2px 0 -1px var(--gruen); }
 #zTests.rot .wert { color: var(--rot); }
@@ -390,9 +405,9 @@ body {
   width: min(880px, 100%); max-height: 100%;
   background: var(--ink-010); border: 1px solid var(--line-idle);
   display: grid; grid-template-rows: 44px 1fr; min-height: 0;
-  clip-path: inset(0 0 100% 0); animation: sheetAuf 260ms var(--ease-mech) forwards;
+  animation: sheetAuf 260ms var(--ease-mech);
 }
-@keyframes sheetAuf { to { clip-path: inset(0 0 0 0) } }
+@keyframes sheetAuf { from { clip-path: inset(0 0 100% 0) } to { clip-path: inset(0 0 0 0) } }
 .sheet-kopf {
   display: flex; align-items: center; justify-content: space-between;
   padding: 0 14px; border-bottom: 1px solid var(--line-hair);
@@ -441,7 +456,7 @@ input:focus, textarea:focus { outline: none; border-color: var(--akzent); }
   position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
   background: var(--ink-020); border: 1px solid var(--line-idle);
   padding: 10px 16px; font-size: 12px; color: var(--text-hi); z-index: 60;
-  clip-path: inset(0 0 100% 0); animation: sheetAuf 200ms var(--ease-mech) forwards;
+  animation: sheetAuf 200ms var(--ease-mech);
 }
 .melder.fehler { border-left: 2px solid var(--rot); }
 
@@ -453,7 +468,18 @@ input:focus, textarea:focus { outline: none; border-color: var(--akzent); }
 @media (max-width: 980px) {
   body { grid-template-columns: 1fr; grid-template-rows: 46px 1fr 200px 132px; }
   .strom { grid-column: 1; grid-row: 3; border-left: none; border-top: 1px solid var(--line-hair); }
-  .rundenband { grid-row: 4; }
+  /* Notenband: die Treppe der Gesamtnoten und die Ziellinie, ueber demselben
+ * Massstab wie die Rundenstempel. Nicht-skalierende Striche, weil das Band
+ * mit preserveAspectRatio="none" in die Breite gezogen wird. */
+#band .notenlinie { fill: none; stroke: var(--role-chef); stroke-width: 1.5px; }
+#band .zielline { fill: none; stroke: var(--akzent); stroke-width: 1px; stroke-dasharray: 3 4; opacity: .55; }
+#band .zielmarke, #band .notenzahl {
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: .10em;
+}
+#band .zielmarke { fill: var(--akzent); opacity: .8 }
+#band .notenzahl { fill: var(--role-chef) }
+
+.rundenband { grid-row: 4; }
   .schriftfeld { grid-column: 1; grid-row: 4; border-left: 1px solid var(--line-hair); }
 }
 

@@ -23,9 +23,9 @@ Nur Node ab Version 20.
 
 | | |
 |---|---|
-| **Projekt** | Wählt aus, in welchem Repository der Agent arbeitet. Fehlt der Loop dort noch, richtet ein Klick ihn ein. |
+| **Projekt** | Wählt aus, in welchem Repository der Agent arbeitet. Fehlt der Loop dort noch, richtet ein Klick ihn ein. Ist sein Schutzsatz älter als der im Scaffold, steht das in der Zeile (`GUARDS 1 < 2`) und ein Klick zieht ihn nach — deine Konfiguration und deine `TASKS.md` bleiben dabei stehen. |
 | **Aufgaben** | `TASKS.md` bearbeiten — das ist der Auftrag. Eine Zeile pro Aufgabe, wichtigste oben. |
-| **Einstellungen** | Testbefehl, Rundendeckel, Budget, Opus-Eskalationen. Schreibt direkt in `loop.sh`, damit ein Terminal-Lauf dieselben Werte bekommt. |
+| **Einstellungen** | Testbefehl, Rundendeckel, Budget, Opus-Eskalationen, Zielnote, beide Wachhundgrenzen und die Zeitgrenze des Testlaufs — alle elf Werte, die oben in `loop.sh` stehen. Schreibt direkt dorthin, damit ein Terminal-Lauf dieselben bekommt. |
 | **Starten** | Fragt nach der Rundenzahl und legt los. |
 | **Anhalten** | *Sanft*: der Loop beendet die Runde, pusht und öffnet den Pull Request. *Hart*: sofort abschiessen — dann gibt es keinen PR. |
 
@@ -46,6 +46,9 @@ die gerade arbeitet. Genau **eine** Kante ist amber, und nur während der
   Das ist der Moment, in dem das System dem Agenten etwas verweigert.
 - **Rundenband** unten: jede Runde bekommt einen Stempel, grün oder rot. Die
   Schieblehre steht auf der laufenden.
+- **Notenband** darüber: die Gesamtnote je Runde als Treppe, mit der Zielnote
+  als gestrichelter Linie. Das ist die einzige Ansicht, die sagt, ob der Lauf
+  irgendwohin kommt — die Rundennummer sagt nur, wie oft es versucht wurde.
 - **»seit 24 s ohne Ereignis · denkt«**: wenn lange nichts passiert, sagt das
   Bild das, statt Betriebsamkeit vorzutäuschen.
 
@@ -82,6 +85,12 @@ Wege:
   fragt einmal nach, danach ist die Warnung weg. Braucht keine
   Administratorrechte — das Zertifikat landet nur in deinem eigenen Speicher.
   Rückgängig mit `zertifikat-vergessen.cmd`.
+
+**Das Cockpit zeigt BEREIT, obwohl ein Lauf läuft.** Sollte nicht mehr
+vorkommen: beim Start und bei jedem Laden der Seite hängt es sich an einen
+laufenden Lauf an — egal ob ein anderes Cockpit-Fenster ihn gestartet hat oder
+ein Terminal. Was vor dem Anhängen passiert ist, kann es nicht nachholen; es
+sagt das in der ersten Zeile des Ereignisstroms.
 
 **Die Seite lädt gar nicht.** Schau ins schwarze Fenster, das `cockpit.cmd`
 geöffnet hat — dort steht, was fehlt. Läuft schon ein Cockpit, sagt es das und

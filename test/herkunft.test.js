@@ -69,7 +69,22 @@ test('ohne Origin ist es keine Seite, sondern eine Shell', () => {
   // Browser nicht. Der Schutz richtet sich gegen SEITEN.
   assert.equal(erlaubt(anfrage({ host: 'localhost:4173' })).ok, true)
   assert.equal(erlaubt(anfrage({ host: '127.0.0.1:4173', origin: '' })).ok, true)
-  assert.equal(erlaubt(anfrage({ host: 'localhost:4173', origin: 'null' })).ok, true)
+})
+
+test('"Origin: null" ist eine Seite, und zwar eine fremde', () => {
+  // Diese Zusicherung stand einmal umgekehrt und liess `null` durch, als waere
+  // es ein fehlender Kopf. Das ist der Unterschied zwischen "kein Browser" und
+  // "ein Browser, der seinen Ursprung nicht nennen darf": ein Iframe mit
+  // sandbox="allow-forms allow-scripts" hat einen undurchsichtigen Ursprung und
+  // schickt genau dieses `null`. Zusammen mit einem Formular mit
+  // enctype="text/plain" -- das keine Preflight-Anfrage ausloest und dessen
+  // Rumpf sich zu gueltigem JSON formen laesst -- war das ein vollstaendiger
+  // Weg von einer beliebigen Webseite zu /api/tasks und /api/start.
+  for (const roh of ['null', 'NULL', ' null ']) {
+    const p = erlaubt(anfrage({ host: 'localhost:4173', origin: roh }))
+    assert.equal(p.ok, false, `Origin "${roh}" muss abgewiesen werden`)
+    assert.match(p.grund, /Origin/, 'die Absage muss den Kopf benennen')
+  }
 })
 
 test('lesende Anfragen sind davon nicht betroffen', () => {

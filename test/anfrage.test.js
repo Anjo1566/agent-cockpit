@@ -145,11 +145,35 @@ test('koerperLesen weist ungueltiges JSON zurueck', async () => {
 test('koerperLesen bricht ab, sobald die Grenze ueberschritten ist', async () => {
   // Die 1e6-Byte-Standardgrenze in echt zu streamen waere ein langsamer Test
   // fuer nichts -- die Grenze ist deshalb ein Parameter, hier auf 10 gesetzt.
+  //
+  // Diese Zusicherung stand einmal umgekehrt: sie verlangte, dass destroy()
+  // aufgerufen WIRD. Das war der Fehler selbst, nicht seine Absicherung.
+  // IncomingMessage.destroy() reisst in Node immer den darunterliegenden
+  // Socket ab, und Anfrage und Antwort teilen sich diesen einen Socket -- der
+  // Aufrufer bekam deshalb einen nackten ECONNRESET statt der 400 mit
+  // "Zu gross.", die der Code verspricht (im Review mit curl nachgestellt,
+  // Exit 55, leerer Rumpf). Die Zusicherung ist jetzt strenger und richtig
+  // herum: der Socket darf NICHT abgerissen werden.
   const anfrage = fakeAnfrage()
   let zerstoert = false
   anfrage.destroy = () => { zerstoert = true }
   const versprechen = koerperLesen(anfrage, 10)
   anfrage.emit('data', '01234567890123456789')
   await assert.rejects(versprechen, /Zu gross/)
-  assert.equal(zerstoert, true, 'die Anfrage wurde beim Ueberschreiten der Grenze nicht destroy()t')
+  assert.equal(zerstoert, false,
+    'koerperLesen darf den Socket nicht zerstoeren -- sonst kann der Server die 400 nicht mehr schreiben')
+})
+
+test('koerperLesen ignoriert weitere Daten nach dem Abbruch', async () => {
+  // Ohne destroy() muss ein Riegel her, sonst waechst der Puffer weiter und
+  // die Ablehnung feuert bei jedem Datenpaket erneut.
+  const anfrage = fakeAnfrage()
+  let ablehnungen = 0
+  const versprechen = koerperLesen(anfrage, 10)
+  versprechen.catch(() => { ablehnungen++ })
+  anfrage.emit('data', '01234567890123456789')
+  anfrage.emit('data', 'und noch mehr')
+  anfrage.emit('end')
+  await assert.rejects(versprechen, /Zu gross/)
+  assert.equal(ablehnungen, 1, 'die Ablehnung darf genau einmal geschehen')
 })
