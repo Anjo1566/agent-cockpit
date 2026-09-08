@@ -1,28 +1,32 @@
 # Status
 
-Round 6: found commit bff5dec already on disk (the projektPfad symlink/junction
-fix from STATUS's own round-5 "next" pointer) with TASKS.md already locally
-edited to drop that task, but no review, grade, or STATUS/TASKS commit had
-happened yet — an interrupted round. Resumed it: sent bff5dec to the reviewer
-(PASS, no blockers; verified the junction escape is actually closed with a live
-test and a real Windows junction). Reviewer's minor follow-ups fed into this
-round's grading rather than a new coder task.
+Round 7: picked the top TASKS.md item — server.js had zero tests. Extracted
+projektPfad() and koerperLesen() into lib/anfrage.js (WURZEL and the byte
+limit became explicit parameters instead of module constants), rewired
+server.js's 5 call sites, and added test/anfrage.test.js: 11 new tests
+covering the outside-root case, the string-prefix sibling collision (the
+exact bug class the real fix guards against), `..` both escaping and not,
+a real symlink/junction escape, a non-repo path, and an oversized body.
+110/110 tests pass (up from ~99). Reviewer: PASS, no blockers, verified the
+prefix-collision test would fail against a naive startsWith() check and
+confirmed no existing test file was touched. Updated two TASKS.md entries'
+stale server.js line references to their new lib/anfrage.js location.
 
-Grade: 7.1/10 (funktion 8, tests 4, robustheit 8, sicherheit 8, bedienung 8,
-klarheit 7), up from 7.0 overall but tests dropped 5 -> 4: the symlink fix
-itself shipped with zero regression test, same failure mode the grader
-penalized last round for 393fd68. This is the second round running a
-security/robustness fix landed with no automated coverage. Added one new
-finding to TASKS.md (server.js:99 WURZEL realpath not try/caught); all other
-grader naechste_schritte were already on the list, so nothing else appended.
+Grade: 7.3/10 (funktion 8, tests 6, robustheit 7, sicherheit 8, bedienung 8,
+klarheit 7), up from 7.1. Tests climbed 4 -> 6, the metric that fell for
+three straight rounds — this round's task directly targeted that gap.
+Robustheit ticked down to 7 only because the grader now also lists the
+CRLF/gitattributes merge issue (already tracked) alongside the WURZEL
+realpath gap. One new grader finding (public/app.js has zero functional
+tests) added to TASKS.md; a QUESTIONS.md note flags that jsdom would be a
+new dependency conflicting with the project's declared no-dependency
+constraint, and recommends testing extractable pure logic instead.
 
-Current task (reviewing bff5dec) failed review 0 times — it passed on first
-pass; no coder round ran this cycle since the fix was already committed.
+Current task (server.js test extraction) failed review 0 times.
 
-Next: server.js's zero-test gap (TASKS.md item, matches grader's #1 and #2
-naechste_schritte) is now the clear top item — tests has fallen 6 -> 5 -> 4
-over three rounds while funktion/robustheit/sicherheit/bedienung hold steady.
-Pick that task next, and do not let it land without a test of its own.
+Next: lib/anfrage.js:54's unwrapped WURZEL realpath (funktion + robustheit,
+named twice by the grader now) is the clear top item. After that, the
+public/app.js coverage gap per the QUESTIONS.md note.
 
 Model for next round: sonnet + high — no repeated review failure, no
 architectural decision; the default holds.
