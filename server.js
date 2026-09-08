@@ -186,7 +186,11 @@ const behandeln = async (anfrage, antwort) => {
       // Ungueltige oder ausserhalb [1, 200] liegende Werte wurden bisher
       // stillschweigend ersetzt/geklemmt -- ohne Rueckmeldung merkte der
       // Aufrufer nie, dass sein Wunschwert ignoriert wurde.
-      const angepasst = Number(k.runden) !== runden ? { angefordert: k.runden, verwendet: runden } : null
+      // Fehlt `runden` ganz, greift nur der dokumentierte Default (3) --
+      // das ist kein "Anpassen" und darf `angepasst` nicht auslösen.
+      const angepasst = k.runden !== undefined && Number(k.runden) !== runden
+        ? { angefordert: k.runden, verwendet: runden }
+        : null
       return json(antwort, 200, { ...lauf.starten(p, runden), angepasst })
     }
 
