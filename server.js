@@ -21,6 +21,7 @@ const { execFile } = require('node:child_process')
 const projekte = require('./lib/projekte.js')
 const konfig = require('./lib/konfig.js')
 const zertifikat = require('./lib/zertifikat.js')
+const herkunft = require('./lib/herkunft.js')
 const { Lauf } = require('./lib/lauf.js')
 const { koerperLesen, projektPfad } = require('./lib/anfrage.js')
 
@@ -77,6 +78,15 @@ const behandeln = async (anfrage, antwort) => {
   const weg = url.pathname
 
   try {
+    // Alles, was den Zustand aendert, muss von der eigenen Seite kommen.
+    // "Hoert nur auf 127.0.0.1" ist dagegen kein Schutz: eine fremde Seite im
+    // selben Browser darf dorthin schicken, und mit Content-Type text/plain
+    // entfaellt sogar die Preflight-Anfrage. Siehe lib/herkunft.js.
+    if (anfrage.method !== 'GET' && anfrage.method !== 'HEAD') {
+      const pruefung = herkunft.erlaubt(anfrage)
+      if (!pruefung.ok) return json(antwort, 403, { fehler: pruefung.grund })
+    }
+
     if (weg === '/' || weg === '/index.html') return datei(antwort, 'index.html')
     if (weg.startsWith('/public/')) return datei(antwort, weg.slice(8))
     if (/^\/[\w.-]+\.(js|css|svg)$/.test(weg)) return datei(antwort, weg.slice(1))
@@ -338,9 +348,40 @@ function starten (port, versuche = 10) {
   })
 }
 
-starten(PORT)
+// Nur starten, wenn diese Datei das Programm IST. Wird sie eingebunden -- von
+// einem Test --, soll sie nichts von selbst tun: kein Port, kein Banner, kein
+// Browserfenster.
+//
+// Das ist der Grund, warum der schwerste Befund dieses Repositorys so lange
+// unbemerkt blieb: die Routen waren nur von Hand pruefbar, also hat sie
+// niemand geprueft. `hoeren()` nimmt einen ephemeren Port und liefert ihn
+// zurueck, damit ein Test den echten Server ansprechen kann statt einer
+// Nachbildung, die dieselbe Luecke haette.
+function hoeren () {
+  return new Promise((fertig, fehler) => {
+    server.removeAllListeners('error')
+    server.once('error', fehler)
+    server.listen(0, '127.0.0.1', () => fertig(server.address().port))
+  })
+}
 
-process.on('SIGINT', () => {
-  console.log('\n  Cockpit beendet. Ein laufender Loop laeuft im Hintergrund weiter.')
-  process.exit(0)
-})
+function schliessen () {
+  for (const s of [server, serverV6, httpsServer]) {
+    try { if (s && s.close) s.close() } catch { /* schon zu */ }
+  }
+  for (const antwort of verbunden) {
+    try { antwort.end() } catch { /* schon zu */ }
+  }
+  verbunden.clear()
+}
+
+if (require.main === module) {
+  starten(PORT)
+
+  process.on('SIGINT', () => {
+    console.log('\n  Cockpit beendet. Ein laufender Loop laeuft im Hintergrund weiter.')
+    process.exit(0)
+  })
+}
+
+module.exports = { hoeren, schliessen, behandeln }
