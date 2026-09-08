@@ -1,25 +1,30 @@
 # Status
 
-Round 2 committed the proModell aliasing fix (e153e29) and passed review. Then
-the run died: the grader started the server to check it, tidied up with
-`taskkill //F //IM node.exe //T`, and that matched the cockpit server — the
-ancestor of this very run (server.js spawns bash, bash runs loop.sh, loop.sh
-runs claude). `//T` took the whole subtree down with it. No stop-reason.txt,
-event stream cut mid tool call, loop.sh hung four hours on a dead child, and
-the dashboard showed LIVE the whole time.
+Round 3: picked the mkfs.ext4 guard-bash.sh task first (per last round's plan),
+but it is blocked — .claude/settings.json denies Edit(./.agents/hooks/**) to
+every agent, and also denies editing itself, so no agent in this loop can ever
+fix or unblock it. Logged in QUESTIONS.md, task stays in TASKS.md marked
+BLOCKED for a human. Moved on to the WURZEL prefix-guard bug in
+server.js:projektPfad instead: p.startsWith(path.resolve(WURZEL)) let a
+sibling directory whose name starts with WURZEL's name (e.g.
+01_Projekte-evil-sibling) through. Fixed with path.relative + startsWith('..')
+/ isAbsolute (also closes a Windows cross-drive gap the old check had).
+Reviewer approved after checking the diff, edge cases and a fresh test run.
+Committed separately from the QUESTIONS.md entry (4dbfa21). 96/96 tests still
+green (server.js has no test file, so none were expected to move).
 
-Fixed outside the loop, because the loop could not have fixed it from inside:
-guard-bash.sh now blocks killing processes as a class (section 2); loop.sh has
-a watchdog that ends a round whose event stream stands still (MAX_STILLE) or
-that overruns MAX_RUNDE, killing by PID, never by image name; lauf.js knows the
-grader, so its time no longer lands on the reviewer's clock; the page tells a
-dead line from a live one (VERBINDUNG WEG / GETRENNT) and stops calling four
-hours of silence "denkt". 96 tests green, 13 of them new in
-test/selbstschutz.test.js, each verified to fail against the old code.
+Grade: 6.5/10 (funktion 7, tests 6, robustheit 6, sicherheit 6, bedienung 7,
+klarheit 7). Grader's headline finding: installiere()/kopiere() in
+lib/projekte.js still force-overwrites a project's existing .gitattributes
+with no merge and no test — the same bug that once broke this repo's own
+cockpit.cmd. Grader also re-flagged the mkfs gap (unfixable from inside, see
+above) and the missing server.js test coverage, both already tracked. Added
+one new task: decompose installiere() (klarheit finding, not yet on the list).
 
-Current task (none) has failed review 0 times.
+Current task (WURZEL guard fix) failed review 0 times.
 
-Next: work the grader's list from .agents/grade.json, starting with the WURZEL
-prefix guard in server.js. The new mkfs.ext4 task is small and can go first.
+Next: work TASKS.md top to bottom — .gitattributes merge-not-overwrite is the
+top open, unblocked item and matches the grader's stated headline finding.
 
-Model for next round: sonnet + high — nothing here is architectural.
+Model for next round: sonnet + high — no architectural decision pending, and
+nothing has failed review twice.
