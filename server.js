@@ -22,6 +22,7 @@ const projekte = require('./lib/projekte.js')
 const konfig = require('./lib/konfig.js')
 const zertifikat = require('./lib/zertifikat.js')
 const { Lauf } = require('./lib/lauf.js')
+const { koerperLesen, projektPfad } = require('./lib/anfrage.js')
 
 const PORT = Number(process.env.COCKPIT_PORT || 4173)
 const WURZEL = process.env.COCKPIT_WURZEL || path.resolve(__dirname, '..')
@@ -49,20 +50,6 @@ function json (antwort, code, koerper) {
   antwort.end(text)
 }
 
-function koerperLesen (anfrage) {
-  return new Promise((fertig, fehler) => {
-    let roh = ''
-    anfrage.on('data', s => {
-      roh += s
-      if (roh.length > 1e6) { anfrage.destroy(); fehler(new Error('Zu gross.')) }
-    })
-    anfrage.on('end', () => {
-      try { fertig(roh ? JSON.parse(roh) : {}) } catch (e) { fehler(new Error('Kein gueltiges JSON.')) }
-    })
-    anfrage.on('error', fehler)
-  })
-}
-
 const TYPEN = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml' }
 
 function datei (antwort, name) {
@@ -77,30 +64,6 @@ function datei (antwort, name) {
     })
     antwort.end(inhalt)
   })
-}
-
-/** Ein Projektpfad aus der Anfrage, gegen die Wurzel geprueft. */
-function projektPfad (wert) {
-  if (!wert || typeof wert !== 'string') throw new Error('Kein Projekt angegeben.')
-  const p = path.resolve(wert)
-  // Literaler Vergleich reicht nicht: liegt innerhalb von WURZEL ein Symlink
-  // oder eine Junction, die nach aussen zeigt, faengt path.relative das nicht
-  // ab -- der String faengt ja mit WURZEL an, obwohl der tatsaechliche
-  // Zielort ausserhalb liegt. Deshalb hier auf den echten (aufgeloesten) Pfad
-  // pruefen. realpathSync wirft bei nicht existierenden Pfaden; das faengt
-  // istRepo unten ohnehin mit derselben Fehlermeldung ab, also wird das hier
-  // als "kein Repo" statt als Absturz behandelt.
-  let echterPfad
-  try {
-    echterPfad = fs.realpathSync(p)
-  } catch {
-    throw new Error('Das ist kein Git-Repository.')
-  }
-  const echteWurzel = fs.realpathSync(path.resolve(WURZEL))
-  const relativ = path.relative(echteWurzel, echterPfad)
-  if (relativ.startsWith('..') || path.isAbsolute(relativ)) throw new Error('Dieses Projekt liegt ausserhalb der Wurzel.')
-  if (!projekte.istRepo(p)) throw new Error('Das ist kein Git-Repository.')
-  return p
 }
 
 function lies (projekt, rel, ersatz = '') {
@@ -148,7 +111,7 @@ const behandeln = async (anfrage, antwort) => {
     }
 
     if (weg === '/api/projekt' && anfrage.method === 'GET') {
-      const p = projektPfad(url.searchParams.get('pfad'))
+      const p = projektPfad(url.searchParams.get('pfad'), WURZEL)
       const stand = projekte.installationsStand(p)
       return json(antwort, 200, {
         ...projekte.details(p),
@@ -162,7 +125,7 @@ const behandeln = async (anfrage, antwort) => {
 
     if (weg === '/api/installieren' && anfrage.method === 'POST') {
       const k = await koerperLesen(anfrage)
-      const p = projektPfad(k.pfad)
+      const p = projektPfad(k.pfad, WURZEL)
       // Der Testbefehl und der Zielbranch werden in installiere() gesetzt --
       // dort ist auch bekannt, ob geraten wurde oder nicht.
       const bericht = projekte.installiere(p, SCAFFOLD)
@@ -176,7 +139,7 @@ const behandeln = async (anfrage, antwort) => {
 
     if (weg === '/api/tasks' && anfrage.method === 'POST') {
       const k = await koerperLesen(anfrage)
-      const p = projektPfad(k.pfad)
+      const p = projektPfad(k.pfad, WURZEL)
       if (typeof k.text !== 'string') throw new Error('Kein Text.')
       fs.writeFileSync(path.join(p, 'TASKS.md'), k.text.replace(/\r\n/g, '\n'), 'utf8')
       // Sofort committen: sonst blockiert der eigene Backlog-Eintrag den Start.
@@ -186,7 +149,7 @@ const behandeln = async (anfrage, antwort) => {
 
     if (weg === '/api/konfig' && anfrage.method === 'POST') {
       const k = await koerperLesen(anfrage)
-      const p = projektPfad(k.pfad)
+      const p = projektPfad(k.pfad, WURZEL)
       const stand = konfig.schreib(p, k.werte || {})
       // loop.sh ist versioniert -- ohne Commit bleibt das Verzeichnis schmutzig.
       const gesichert = projekte.sichere(p, ['loop.sh'], 'Update the loop configuration')
@@ -195,7 +158,7 @@ const behandeln = async (anfrage, antwort) => {
 
     if (weg === '/api/start' && anfrage.method === 'POST') {
       const k = await koerperLesen(anfrage)
-      const p = projektPfad(k.pfad)
+      const p = projektPfad(k.pfad, WURZEL)
       const runden = Math.max(1, Math.min(200, Number(k.runden) || 3))
       // Ungueltige oder ausserhalb [1, 200] liegende Werte wurden bisher
       // stillschweigend ersetzt/geklemmt -- ohne Rueckmeldung merkte der
