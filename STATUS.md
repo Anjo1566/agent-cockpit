@@ -1,30 +1,32 @@
 # Status
 
-Round 3: picked the mkfs.ext4 guard-bash.sh task first (per last round's plan),
-but it is blocked — .claude/settings.json denies Edit(./.agents/hooks/**) to
-every agent, and also denies editing itself, so no agent in this loop can ever
-fix or unblock it. Logged in QUESTIONS.md, task stays in TASKS.md marked
-BLOCKED for a human. Moved on to the WURZEL prefix-guard bug in
-server.js:projektPfad instead: p.startsWith(path.resolve(WURZEL)) let a
-sibling directory whose name starts with WURZEL's name (e.g.
-01_Projekte-evil-sibling) through. Fixed with path.relative + startsWith('..')
-/ isAbsolute (also closes a Windows cross-drive gap the old check had).
-Reviewer approved after checking the diff, edge cases and a fresh test run.
-Committed separately from the QUESTIONS.md entry (4dbfa21). 96/96 tests still
-green (server.js has no test file, so none were expected to move).
+Round 4: picked the top unblocked task — installiere() in lib/projekte.js
+force-copied the scaffold's .gitattributes over a project's own, the same bug
+that once dropped "*.cmd text eol=crlf" and broke cockpit.cmd. Added
+gitattributesZusammenfuehren(): keeps every line the project already has,
+appends only missing scaffold lines, plain-copies when none exists yet. Every
+other SCAFFOLD/SCAFFOLD_ORDNER entry still uses the old force-copy unchanged.
+Covered by a new test/projekte-gitattributes.test.js (3 tests); the frozen
+test/projekte.test.js was not touched. Reviewer approved after checking the
+diff, scope, and a fresh 99/99 test run. Committed as 73c0c41.
 
-Grade: 6.5/10 (funktion 7, tests 6, robustheit 6, sicherheit 6, bedienung 7,
-klarheit 7). Grader's headline finding: installiere()/kopiere() in
-lib/projekte.js still force-overwrites a project's existing .gitattributes
-with no merge and no test — the same bug that once broke this repo's own
-cockpit.cmd. Grader also re-flagged the mkfs gap (unfixable from inside, see
-above) and the missing server.js test coverage, both already tracked. Added
-one new task: decompose installiere() (klarheit finding, not yet on the list).
+Grade: 7.3/10 (funktion 8, tests 6, robustheit 7, sicherheit 7, bedienung 8,
+klarheit 8), up from 6.5. Grader's headline finding: server.js still has zero
+test coverage despite holding the path-traversal guard fixed two rounds ago.
+Added the grader's and reviewer's minor findings to TASKS.md (CRLF mixing in
+the new merge helper, assert.match vs assert.equal in the new test); the
+mkfs.ext4 guard gap and the /api/start silent-clamp task were already listed,
+so nothing new was appended for those. Logged a new guard-bash.sh usability
+gap in QUESTIONS.md: it can block a safe `git commit -m` if the message
+contains the bare word "install" or ".gitattributes" — also unfixable from
+inside (same Edit-deny as the mkfs gap).
 
-Current task (WURZEL guard fix) failed review 0 times.
+Current task (.gitattributes merge) failed review 0 times.
 
-Next: work TASKS.md top to bottom — .gitattributes merge-not-overwrite is the
-top open, unblocked item and matches the grader's stated headline finding.
+Next: /api/start's silent runden-clamp is the top unblocked TASKS.md item;
+server.js test coverage sits right below it and is the grader's headline
+finding two rounds running — whichever the next round picks, both are
+current priorities.
 
-Model for next round: sonnet + high — no architectural decision pending, and
-nothing has failed review twice.
+Model for next round: sonnet + high — no architectural decision pending nor
+two failed reviews.
