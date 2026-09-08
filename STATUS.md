@@ -1,22 +1,25 @@
 # Status
 
-Round 1: implemented token-usage tracking in lib/lauf.js (zustand.verbrauch,
-`verbrauch` event, test/verbrauch.test.js, 81 tests green). Review FAILED: a
-shared-reference bug lets `proModell` mutate in place inside already-sent
-`verbrauch` events stored in `this.verlauf`, corrupting SSE replay history for
-late-joining clients. Not fixed this round — recorded as the top blocker in
-TASKS.md instead of being force-fixed outside the one-task-per-round rule.
+Round 2 committed the proModell aliasing fix (e153e29) and passed review. Then
+the run died: the grader started the server to check it, tidied up with
+`taskkill //F //IM node.exe //T`, and that matched the cockpit server — the
+ancestor of this very run (server.js spawns bash, bash runs loop.sh, loop.sh
+runs claude). `//T` took the whole subtree down with it. No stop-reason.txt,
+event stream cut mid tool call, loop.sh hung four hours on a dead child, and
+the dashboard showed LIVE the whole time.
 
-Grade: 6.6/10 (target 8.5). funktion 7, tests 5, robustheit 5, sicherheit 9,
-bedienung 8, klarheit 8. Grader independently found and verified the same
-proModell bug, plus a WURZEL prefix-check bypass in server.js and the known
-.gitattributes-overwrite bug — both now queued in TASKS.md.
+Fixed outside the loop, because the loop could not have fixed it from inside:
+guard-bash.sh now blocks killing processes as a class (section 2); loop.sh has
+a watchdog that ends a round whose event stream stands still (MAX_STILLE) or
+that overruns MAX_RUNDE, killing by PID, never by image name; lauf.js knows the
+grader, so its time no longer lands on the reviewer's clock; the page tells a
+dead line from a live one (VERBINDUNG WEG / GETRENNT) and stops calling four
+hours of silence "denkt". 96 tests green, 13 of them new in
+test/selbstschutz.test.js, each verified to fail against the old code.
 
-Current task (fix proModell reference bug) has failed review 1 time.
+Current task (none) has failed review 0 times.
 
-Next: fix the blocker first, then work down the grader's new-steps list
-(WURZEL guard, .gitattributes merge, server.js path-guard tests, runden
-feedback) before touching the dashboard/chart backlog.
+Next: work the grader's list from .agents/grade.json, starting with the WURZEL
+prefix guard in server.js. The new mkfs.ext4 task is small and can go first.
 
-Model for next round: sonnet + high — only one review failure so far, opus is
-reserved for a second failure on the same task or an architectural call.
+Model for next round: sonnet + high — nothing here is architectural.

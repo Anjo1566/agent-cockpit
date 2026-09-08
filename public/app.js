@@ -19,13 +19,31 @@ const ROLLEN = {
   reviewer: { cx: 950, cy: 512, name: 'REVIEWER', kuerzel: 'REV', farbe: 'var(--role-reviewer)', massOben: false, ruhe: 'prüft, ändert nichts' }
 }
 const KANTE_ZU = { coder: 'e1', reviewer: 'e2', chef: 'e3' }
+
+// Der grader teilt sich den Platz des Reviewers, traegt dort aber seinen
+// eigenen Namen. Ohne das stand seine Standzeit unter fremdem Namen auf dem
+// Brett -- vier Stunden lang, ohne dass jemand die Rolle haette nachschlagen
+// koennen, die wirklich haengt.
+const ANZEIGENAME = { chef: 'CHEF', coder: 'CODER', reviewer: 'REVIEWER', grader: 'GRADER' }
+const KUERZEL = { chef: 'CHF', coder: 'COD', reviewer: 'REV', grader: 'GRD' }
+
+// Stille ist normal, Stillstand nicht -- und der Unterschied ist nur die Zeit.
+// "denkt" ohne Obergrenze war die bequemste Erklaerung fuer alles: der Lauf
+// stand vier Stunden tot da, und auf dem Schirm dachte er nach.
+const STILLE_DENKT  = 20    // s -- ab hier ueberhaupt erwaehnenswert
+const STILLE_STOCKT = 120   // s -- laenger als jeder normale Werkzeugaufruf
+const STILLE_STEHT  = 600   // s -- so lange denkt niemand mehr; das ist der
+                            //      Wert, ab dem auch loop.sh die Runde beendet
 const AUS = { width: 268, height: 104 }
 const AN  = { width: 300, height: 120 }
 
 const zustand = {
   laeuft: false, projekt: null, projektName: null,
+  // Die Leitung zum Server. Sie ist NICHT dasselbe wie `laeuft`: der Server
+  // kann sterben, waehrend die Seite weiter ihre letzte Wahrheit zeichnet.
+  verbunden: false, ohneStrom: false,
   runde: 0, runden: 0, modell: null, aufwand: null,
-  rolle: null, auftrag: null, werkzeug: null,
+  rolle: null, taetig: null, auftrag: null, werkzeug: null,
   seit: null, letztesEreignis: null, start: null,
   tests: { anzahl: null, gruen: null }, kosten: 0, blocker: 0, guards: 0,
   note: null, zielnote: null, notenband: [], turns: 0, fragen: 0,
@@ -161,6 +179,7 @@ function render () {
   for (const schluessel of Object.keys(ROLLEN)) {
     const t = knotenGruppen[schluessel]
     const aktiv = zustand.laeuft && zustand.rolle === schluessel
+    t.name.textContent = (aktiv && ANZEIGENAME[zustand.taetig]) || ROLLEN[schluessel].name
     knotenGeometrie(schluessel, aktiv)
     t.g.classList.toggle('aktiv', aktiv)
     t.g.classList.toggle('rot', !!(zustand.gesperrt && aktiv))
@@ -180,12 +199,18 @@ function render () {
     zeichneTakt(schluessel)
 
     // Ehrlichkeit bei Stille: keine erfundene Aktivität, sondern die Wahrheit.
+    // Und ab einer gewissen Laenge ist "denkt" selbst die Erfindung.
     let stillText = ''
+    let stillGrad = 0
     if (aktiv && zustand.letztesEreignis) {
       const s = Math.floor((Date.now() - zustand.letztesEreignis) / 1000)
-      if (s >= 20) stillText = `seit ${s} s ohne Ereignis · denkt`
+      if (s >= STILLE_STEHT) { stillGrad = 2; stillText = `seit ${stilleText(s)} ohne Ereignis · steht` }
+      else if (s >= STILLE_STOCKT) { stillGrad = 1; stillText = `seit ${stilleText(s)} ohne Ereignis · stockt` }
+      else if (s >= STILLE_DENKT) { stillText = `seit ${s} s ohne Ereignis · denkt` }
     }
     t.still.textContent = stillText
+    t.still.classList.toggle('stockt', stillGrad === 1)
+    t.still.classList.toggle('steht', stillGrad === 2)
     const r = ROLLEN[schluessel]
     t.still.setAttribute('x', r.cx)
     t.still.setAttribute('text-anchor', 'middle')
@@ -211,9 +236,17 @@ function render () {
   $('#repo').textContent = zustand.projekt || 'kein Projekt gewählt'
   const statuswort = $('#statuswort')
   statuswort.textContent = statusText()
-  statuswort.classList.toggle('aktiv', zustand.laeuft && !zustand.gesperrt)
+  statuswort.classList.toggle('aktiv', zustand.laeuft && !zustand.gesperrt && !warnLage())
   statuswort.classList.toggle('gesperrt', !!zustand.gesperrt)
-  $('#live').classList.toggle('an', zustand.laeuft)
+  statuswort.classList.toggle('warnt', warnLage() && !zustand.gesperrt)
+  // LIVE heisst: diese Seite hoert gerade wirklich zu. Vorher hing das am
+  // zuletzt empfangenen `laeuft` -- also ausgerechnet an der Angabe, die eine
+  // tote Leitung nicht mehr widerrufen kann.
+  const liveAn = zustand.laeuft && (zustand.verbunden || zustand.ohneStrom)
+  const live = $('#live')
+  live.classList.toggle('an', liveAn)
+  live.classList.toggle('getrennt', zustand.laeuft && !liveAn)
+  live.lastChild.textContent = (zustand.laeuft && !liveAn) ? 'GETRENNT' : 'LIVE'
   const sk = $('#startknopf')
   sk.textContent = zustand.laeuft ? 'Anhalten' : 'Starten'
   sk.classList.toggle('laeuft', zustand.laeuft)
@@ -258,14 +291,38 @@ function render () {
   zeichneBand()
 }
 
+// Sekunden, die man nach vier Stunden noch lesen kann. "seit 15087 s" ist
+// eine Zahl; "seit 4 h 11 min" ist eine Aussage.
+function stilleText (s) {
+  if (s < 90) return `${s} s`
+  if (s < 5400) return `${Math.round(s / 60)} min`
+  return `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min`
+}
+
+function stilleSekunden () {
+  if (!zustand.laeuft || !zustand.letztesEreignis) return 0
+  return Math.floor((Date.now() - zustand.letztesEreignis) / 1000)
+}
+
+// Eine tote Leitung und ein stehender Lauf schlagen die Rolle. Wer nichts mehr
+// hoert, soll nicht lesen, wer angeblich gerade prueft -- das war die Zeile,
+// die vier Stunden lang "REVIEWER PRÜFT" behauptet hat.
 function statusText () {
   if (zustand.gesperrt) return 'GESPERRT'
   if (zustand.ende) return 'BEENDET'
   if (!zustand.projekt) return 'KEIN PROJEKT'
   if (!zustand.laeuft) return 'BEREIT'
+  if (!zustand.verbunden && !zustand.ohneStrom) return 'VERBINDUNG WEG'
+  if (stilleSekunden() >= STILLE_STEHT) return 'STEHT'
+  if (zustand.taetig === 'grader') return 'GRADER BEWERTET'
   if (zustand.rolle === 'coder') return 'CODER ARBEITET'
   if (zustand.rolle === 'reviewer') return 'REVIEWER PRÜFT'
   return 'CHEF ORDNET AN'
+}
+
+function warnLage () {
+  if (!zustand.laeuft) return false
+  return (!zustand.verbunden && !zustand.ohneStrom) || stilleSekunden() >= STILLE_STEHT
 }
 
 function uhrText (seit, zehntel) {
@@ -465,7 +522,7 @@ function stromZeile (opt) {
   z.innerHTML =
     `<div class="balken"></div>` +
     `<div class="zeit">${zeit}</div>` +
-    `<div class="kuerzel">${opt.rolle ? ROLLEN[opt.rolle].kuerzel : ''}</div>` +
+    `<div class="kuerzel">${KUERZEL[opt.taetig] || (opt.rolle ? ROLLEN[opt.rolle].kuerzel : '')}</div>` +
     `<div class="inhalt">${opt.werkzeug ? `<span class="werkzeugname">${escape_(opt.werkzeug)}</span> ` : ''}${escape_(opt.text)}</div>`
   const untenDran = stromliste.scrollHeight - stromliste.scrollTop - stromliste.clientHeight < 60
   stromliste.appendChild(z)
@@ -511,13 +568,24 @@ function verbinde () {
   // Mit ?ohne-strom=1 bleibt die Seite still: kein EventSource, keine offene
   // Verbindung. Gedacht fuer Screenshots und fuer den Blick auf einen
   // abgeschlossenen Lauf, ohne dass der Browser eine Leitung offen haelt.
-  if (new URLSearchParams(location.search).has('ohne-strom')) return
+  if (new URLSearchParams(location.search).has('ohne-strom')) {
+    zustand.ohneStrom = true
+    return
+  }
   const quelle = new EventSource('/api/strom')
+  quelle.onopen = () => { zustand.verbunden = true; render() }
   quelle.onmessage = (n) => {
     let e; try { e = JSON.parse(n.data) } catch { return }
+    zustand.verbunden = true
     verarbeite(e)
   }
-  quelle.onerror = () => { /* EventSource verbindet von selbst neu */ }
+  // EventSource verbindet von selbst neu -- aber nur, solange es jemanden gibt,
+  // der antwortet. Stirbt der Server, versucht es das stumm bis in alle
+  // Ewigkeit, und die Seite zeichnet derweil ihren letzten Stand weiter: LIVE,
+  // Uhr laeuft, Rolle prueft. Genau so hat dieses Cockpit vier Stunden lang
+  // einen Lauf angezeigt, den es nicht mehr gab. Der Zustand muss die
+  // Leitung kennen, sonst luegt die Anzeige mit voller Ueberzeugung.
+  quelle.onerror = () => { zustand.verbunden = false; render() }
 }
 
 function verarbeite (e) {
@@ -525,7 +593,8 @@ function verarbeite (e) {
     case 'zustand':
       Object.assign(zustand, {
         laeuft: e.laeuft, projekt: e.projekt, runde: e.runde, runden: e.runden,
-        modell: e.modell, aufwand: e.aufwand, rolle: e.rolle, auftrag: e.auftrag,
+        modell: e.modell, aufwand: e.aufwand, rolle: e.rolle,
+        taetig: e.taetig || e.rolle, auftrag: e.auftrag,
         seit: e.seit, start: e.start, tests: e.tests || zustand.tests,
         kosten: e.kosten || 0, guards: e.guards || 0, letztesEreignis: e.letztesEreignis,
         note: e.note ?? null, zielnote: e.zielnote ?? null,
@@ -537,6 +606,7 @@ function verarbeite (e) {
     case 'start':
       Object.assign(zustand, {
         laeuft: true, projekt: e.projekt, runden: e.runden, start: Date.now(),
+        rolle: 'chef', taetig: 'chef',
         seit: Date.now(), letztesEreignis: Date.now(), ende: null, pr: null,
         rundenband: [], takte: { chef: [], coder: [], reviewer: [] },
         kantenzustand: { e1: 'bereit', e2: 'ghost', e3: 'ghost' }, guards: 0, kosten: 0,
@@ -548,7 +618,7 @@ function verarbeite (e) {
     case 'runde':
       Object.assign(zustand, {
         runde: e.i, runden: e.max, modell: e.modell, aufwand: e.aufwand,
-        rolle: 'chef', seit: Date.now(), letztesEreignis: Date.now(),
+        rolle: 'chef', taetig: 'chef', seit: Date.now(), letztesEreignis: Date.now(),
         takte: { chef: [], coder: [], reviewer: [] },
         kantenzustand: { e1: 'bereit', e2: 'ghost', e3: 'ghost' }
       })
@@ -560,19 +630,20 @@ function verarbeite (e) {
         zustand.phasendauer[vorher] = Math.floor((Date.now() - zustand.seit) / 1000)
       }
       zustand.rolle = e.rolle
+      zustand.taetig = e.taetig || e.rolle
       zustand.auftrag = e.auftrag
       zustand.werkzeug = null
       zustand.seit = Date.now()
       zustand.letztesEreignis = Date.now()
       if (vorher && vorher !== e.rolle) uebergabe(e.rolle)
-      stromZeile({ rolle: e.rolle, werkzeug: 'ÜBERNIMMT', text: e.auftrag })
+      stromZeile({ rolle: e.rolle, taetig: zustand.taetig, werkzeug: 'ÜBERNIMMT', text: e.auftrag })
       break
     }
     case 'aktion':
       zustand.werkzeug = { name: e.name, detail: e.detail, klasse: e.klasse }
       zustand.letztesEreignis = Date.now()
       zustand.takte[e.rolle] = (zustand.takte[e.rolle] || []).concat(e.klasse)
-      stromZeile({ rolle: e.rolle, werkzeug: e.name.toUpperCase(), text: e.detail })
+      stromZeile({ rolle: e.rolle, taetig: zustand.taetig, werkzeug: e.name.toUpperCase(), text: e.detail })
       break
     case 'guard':
       zustand.gesperrt = e
@@ -1074,6 +1145,10 @@ render()
 requestAnimationFrame(takt)
 
 if (parameter.has('probe')) {
+  // Der Probelauf spielt sich selbst ab. Es gibt keine Leitung, die abreissen
+  // koennte -- ohne diese Zeile meldete die Kopfleiste hier "VERBINDUNG WEG",
+  // und eine Warnung, die im Normalfall angeht, liest bald niemand mehr.
+  zustand.ohneStrom = true
   probelauf(parameter.get('probe'))
 } else {
   verbinde()

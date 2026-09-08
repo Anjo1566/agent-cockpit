@@ -96,6 +96,9 @@ body {
 }
 .statuswort.aktiv { color: var(--akzent); }
 .statuswort.gesperrt { color: var(--rot); }
+/* Eine tote Leitung und ein stehender Lauf sind kein Nebenzustand: sie sind
+ * der Grund, warum alles andere auf dem Schirm nicht mehr stimmt. */
+.statuswort.warnt { color: var(--rot); }
 .uhr { font-family: var(--font-mono); font-size: 22px; letter-spacing: .01em; color: var(--text-hi); }
 .kopf-rechts { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 
@@ -134,6 +137,9 @@ body {
 }
 .live i { width: 6px; height: 6px; background: var(--text-ghost); display: block; }
 .live.an i { background: var(--role-chef); animation: puls 1060ms steps(1, end) infinite; }
+/* Nicht blinkend: ein Blinken liest sich als Betrieb. Getrennt ist Stillstand. */
+.live.getrennt { color: var(--rot); }
+.live.getrennt i { background: var(--rot); animation: none; }
 @keyframes puls { 0%, 50% { opacity: 1 } 50.01%, 100% { opacity: .15 } }
 
 /* ------------------------------------------------------------ Zeichenfläche */
@@ -219,6 +225,9 @@ body {
 .knoten-auftrag.ruhend { fill: var(--text-ghost); font-size: 11px; letter-spacing: .04em; }
 .knoten-werkzeug { font-family: var(--font-mono); font-size: 11px; fill: var(--text-low); letter-spacing: .02em; }
 .knoten-still { font-family: var(--font-mono); font-size: 10px; fill: var(--text-low); letter-spacing: .04em; }
+/* "denkt" bleibt grau -- das ist normal. Ab hier ist es das nicht mehr. */
+.knoten-still.stockt { fill: var(--akzent); }
+.knoten-still.steht  { fill: var(--rot); }
 
 .scanlinie { stroke: var(--akzent); stroke-width: 1; opacity: 0; }
 .knoten.aktiv .scanlinie { opacity: .08; animation: scan 4800ms linear infinite; }
