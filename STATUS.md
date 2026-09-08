@@ -1,32 +1,28 @@
 # Status
 
-Round 4: picked the top unblocked task — installiere() in lib/projekte.js
-force-copied the scaffold's .gitattributes over a project's own, the same bug
-that once dropped "*.cmd text eol=crlf" and broke cockpit.cmd. Added
-gitattributesZusammenfuehren(): keeps every line the project already has,
-appends only missing scaffold lines, plain-copies when none exists yet. Every
-other SCAFFOLD/SCAFFOLD_ORDNER entry still uses the old force-copy unchanged.
-Covered by a new test/projekte-gitattributes.test.js (3 tests); the frozen
-test/projekte.test.js was not touched. Reviewer approved after checking the
-diff, scope, and a fresh 99/99 test run. Committed as 73c0c41.
+Round 5: picked the top unblocked task — /api/start's silent runden clamp/default
+(server.js). Added an `angepasst: {angefordert, verwendet}` field to the response
+and a toast in public/app.js when the caller's value was overridden. First pass
+(be44ba0) had a bug the reviewer caught: omitting `runden` entirely (the
+documented default-of-3 path) also set `angepasst`, showing a broken "undefined"
+message. Sent back, fixed in 393fd68 (`angepasst` now requires `k.runden !==
+undefined`), re-verified directly. 99/99 tests pass throughout. Task removed
+from TASKS.md.
 
-Grade: 7.3/10 (funktion 8, tests 6, robustheit 7, sicherheit 7, bedienung 8,
-klarheit 8), up from 6.5. Grader's headline finding: server.js still has zero
-test coverage despite holding the path-traversal guard fixed two rounds ago.
-Added the grader's and reviewer's minor findings to TASKS.md (CRLF mixing in
-the new merge helper, assert.match vs assert.equal in the new test); the
-mkfs.ext4 guard gap and the /api/start silent-clamp task were already listed,
-so nothing new was appended for those. Logged a new guard-bash.sh usability
-gap in QUESTIONS.md: it can block a safe `git commit -m` if the message
-contains the bare word "install" or ".gitattributes" — also unfixable from
-inside (same Edit-deny as the mkfs gap).
+Grade: 7.0/10 (funktion 8, tests 5, robustheit 7, sicherheit 7, bedienung 8,
+klarheit 7), down from 7.3 — tests dropped from 6 to 5: the grader flagged
+that 393fd68 itself shipped with no test catching the bug it fixed, on top of
+the standing server.js-has-zero-tests gap. New headline finding: projektPfad()
+(server.js:83-90) checks WURZEL boundary on a literal path string, never
+fs.realpathSync — a junction/symlink inside WURZEL pointing outside it bypasses
+the guard. Unlike the mkfs gap, this one is NOT blocked by settings.json. Added
+to TASKS.md near the top, above the chart backlog. Also added the grader's
+oversize-body error-message finding at the bottom.
 
-Current task (.gitattributes merge) failed review 0 times.
+Current task (runden clamp feedback) failed review 1 time, then passed.
 
-Next: /api/start's silent runden-clamp is the top unblocked TASKS.md item;
-server.js test coverage sits right below it and is the grader's headline
-finding two rounds running — whichever the next round picks, both are
-current priorities.
+Next: the projektPfad realpath/symlink security gap is the top unblocked item
+and matches the grader's sicherheit/robustheit findings — pick that next.
 
-Model for next round: sonnet + high — no architectural decision pending nor
-two failed reviews.
+Model for next round: sonnet + high — one failed review, not two; no
+architectural decision pending.
