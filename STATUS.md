@@ -1,32 +1,35 @@
 # Status
 
-Round 7: picked the top TASKS.md item — server.js had zero tests. Extracted
-projektPfad() and koerperLesen() into lib/anfrage.js (WURZEL and the byte
-limit became explicit parameters instead of module constants), rewired
-server.js's 5 call sites, and added test/anfrage.test.js: 11 new tests
-covering the outside-root case, the string-prefix sibling collision (the
-exact bug class the real fix guards against), `..` both escaping and not,
-a real symlink/junction escape, a non-repo path, and an oversized body.
-110/110 tests pass (up from ~99). Reviewer: PASS, no blockers, verified the
-prefix-collision test would fail against a naive startsWith() check and
-confirmed no existing test file was touched. Updated two TASKS.md entries'
-stale server.js line references to their new lib/anfrage.js location.
+Round 8: picked the top actionable item (guard-bash.sh mkfs fix stays blocked,
+needs a human per QUESTIONS.md). Wrapped lib/anfrage.js's WURZEL
+fs.realpathSync() in its own try/catch (projektPfad()), throwing a distinct
+'Wurzelverzeichnis des Servers nicht erreichbar.' instead of leaking a raw
+ENOENT. Coder discovered guard-files.sh blocks edits to any git-tracked test
+file, not just a hardcoded frozen list, so test/anfrage.test.js (added last
+round) was also protected -- added test/anfrage-wurzel.test.js instead.
+Reviewer: PASS, no blockers, verified the new tests are not vacuous and no
+existing/frozen file was touched; flagged one minor finding (helper-code
+duplication between the two anfrage test files, unavoidable under the guard)
+added to TASKS.md. 112/112 tests pass.
 
-Grade: 7.3/10 (funktion 8, tests 6, robustheit 7, sicherheit 8, bedienung 8,
-klarheit 7), up from 7.1. Tests climbed 4 -> 6, the metric that fell for
-three straight rounds — this round's task directly targeted that gap.
-Robustheit ticked down to 7 only because the grader now also lists the
-CRLF/gitattributes merge issue (already tracked) alongside the WURZEL
-realpath gap. One new grader finding (public/app.js has zero functional
-tests) added to TASKS.md; a QUESTIONS.md note flags that jsdom would be a
-new dependency conflicting with the project's declared no-dependency
-constraint, and recommends testing extractable pure logic instead.
+Grade: 6.8/10 (funktion 8, tests 6, robustheit 6, sicherheit 7, bedienung 6,
+klarheit 7), down from 7.3. The drop is one real finding, not noise: the
+grader live-tested a >1e6-byte POST against a running server and got a raw
+ECONNRESET instead of the 400 JSON the "Zu gross." error appears to promise
+-- koerperLesen() calls anfrage.destroy() before the rejection can be turned
+into a response. This was invisible to all 112 green tests because
+test/anfrage.test.js fakes destroy() as a no-op. Added as the new top
+non-blocked task, plus a task for a real-socket test to catch this class of
+bug. Three more grader next-steps (app.js DOM tests, gitattributes assert
+tightening, installiere() breakup) were already tracked, so skipped as
+duplicates.
 
-Current task (server.js test extraction) failed review 0 times.
+Current task (WURZEL realpath fix) failed review 0 times.
 
-Next: lib/anfrage.js:54's unwrapped WURZEL realpath (funktion + robustheit,
-named twice by the grader now) is the clear top item. After that, the
-public/app.js coverage gap per the QUESTIONS.md note.
+Next: the ECONNRESET bug in koerperLesen() is the clear top item -- it is a
+real behavioral defect a live server test caught that the test suite missed,
+touching three graded categories at once. After that, the real-socket test
+to close the coverage gap that let it hide.
 
-Model for next round: sonnet + high — no repeated review failure, no
-architectural decision; the default holds.
+Model for next round: sonnet + high -- no repeated review failure, and this
+is a well-scoped one-file bug fix, not an architectural decision.
